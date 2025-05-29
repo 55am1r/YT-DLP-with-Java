@@ -22,6 +22,7 @@ public class SongDownloader {
                     "--embed-thumbnail",
                     "--add-metadata",
                     "-o",
+                //Adjust your loaction here
                     System.getProperty("user.home")
                             + "/Downloads/Editing Tools/%(title)s_%(uploader)s.%(ext)s",
                     userUrl);
