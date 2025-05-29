@@ -6,20 +6,21 @@ public class SongDownloader {
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
         System.out.println("Welcome to the Song Downloader by PredatorFx!");
-        System.out.print("Enter the URL of the song you want to download: ");
-        String songUrl = scanner.nextLine(); // Replace with actual URL
+        System.out.print("Enter the URL of the song/video you want to download: ");
+        String userUrl = scanner.nextLine(); // Replace with actual URL
         try {
             ProcessBuilder builder = new ProcessBuilder(
-                    "yt-dlp",
+"yt-dlp",
                     "-x",
                     "--audio-format", "mp3",
                     "--audio-quality", "0",
                     "--embed-thumbnail",
                     "--add-metadata",
                     "-o",
+                //Adjust your loaction here
                     System.getProperty("user.home")
-                            + "/Downloads/Editing Tools/BGS/Songs/%(title)s_%(uploader)s.%(ext)s",
-                    songUrl);
+                            + "/Downloads/Editing Tools/%(title)s_%(uploader)s.%(ext)s",
+                    userUrl);
 
             builder.redirectErrorStream(true);
             Process process = builder.start();
