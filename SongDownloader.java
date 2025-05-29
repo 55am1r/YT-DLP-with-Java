@@ -10,7 +10,7 @@ public class SongDownloader {
         String songUrl = scanner.nextLine(); // Replace with actual URL
         try {
             ProcessBuilder builder = new ProcessBuilder(
-                    "C:\\Users\\shaik\\AppData\\Local\\Microsoft\\WinGet\\Packages\\yt-dlp.yt-dlp_Microsoft.Winget.Source_8wekyb3d8bbwe\\yt-dlp.exe",
+"yt-dlp",
                     "-x",
                     "--audio-format", "mp3",
                     "--audio-quality", "0",
@@ -18,7 +18,7 @@ public class SongDownloader {
                     "--add-metadata",
                     "-o",
                     System.getProperty("user.home")
-                            + "/Downloads/Songs/%(title)s_%(uploader)s.%(ext)s",
+                            + "/Downloads/Editing Tools/BGS/Songs/%(title)s_%(uploader)s.%(ext)s",
                     songUrl);
 
             builder.redirectErrorStream(true);
