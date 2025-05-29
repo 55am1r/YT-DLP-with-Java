@@ -67,7 +67,7 @@ public class SongDownloader {
             System.out.println(
                     "\nWhich Quality do you want to download?\n -->(Look in Youtube Quality Settings, Select the top quality available for your video)");
             System.out.print(
-                    "1. 144p\t2. 240p\t3. 360p\t4. 480p\n5. 720p\t6. 1080p\t7. 1440p\t8. 2160p -->(Your choice): ");
+                    "1. 144p\t2. 240p\t3. 360p\t4. 480p\n5. 720p\t6. 1080p 7. 1440p 8. 2160p -->(Your choice): ");
             int qualityChoice = scanner.nextInt();
             switch (qualityChoice) {
                 case 1:
