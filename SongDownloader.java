@@ -11,12 +11,12 @@ public class SongDownloader {
         try {
             ProcessBuilder builder = new ProcessBuilder(
 "yt-dlp",
-                    "-x",
-                    "--audio-format", "mp3",
-                    "--audio-quality", "0",
-                    "--embed-thumbnail",
-                    "--add-metadata",
-                    "-o",
+                    // "-x",
+                    // "--audio-format", "mp3",
+                    // "--audio-quality", "0",
+                    // "--embed-thumbnail",
+                    // "--add-metadata",
+                    // "-o",
                 //Adjust your loaction here
                     System.getProperty("user.home")
                             + "/Downloads/Editing Tools/%(title)s_%(uploader)s.%(ext)s",
