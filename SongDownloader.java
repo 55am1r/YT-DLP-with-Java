@@ -10,7 +10,7 @@ public class SongDownloader {
         String songUrl = scanner.nextLine(); // Replace with actual URL
         try {
             ProcessBuilder builder = new ProcessBuilder(
-"yt-dlp",
+                    "yt-dlp",
                     "-x",
                     "--audio-format", "mp3",
                     "--audio-quality", "0",
