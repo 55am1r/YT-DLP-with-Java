@@ -13,7 +13,7 @@ public class SongDownloader {
             System.out.print("Enter URL to download: ");
             String userUrl = scanner.nextLine();
             if ((!userUrl.startsWith("http://") && !userUrl.startsWith("https://")) || userUrl.isEmpty()) {
-                System.out.println("\nInvalid URL. Please enter a valid URL starting with http:// or https://");
+                System.out.println("\nInvalid URL. Please enter a valid URL starting with http:// or https://\n");
                 continue;
             } else {
                 if (urlCheckToDownloadMusic(userUrl)) {
