@@ -63,7 +63,7 @@ public class SongDownloader {
             }
             return userUrl.substring(0, start);
         }
-        return userUrl;  // return as-is if '&' not found
+        return userUrl; // return as-is if '&' not found
     }
 
     public static void downloadAudio(String userUrl) {
@@ -161,6 +161,7 @@ public class SongDownloader {
                 break;
             }
             System.out.println("Downloading video...");
+            boolean formatError = false;
             // Replace with actual URL
             try {
                 ProcessBuilder builder = new ProcessBuilder(
@@ -182,11 +183,23 @@ public class SongDownloader {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     System.out.println(line);
+                    if (line.contains("Requested format is not available")
+                            || line.toLowerCase().contains("unknown format")
+                            || line.toLowerCase().contains("merge") && line.toLowerCase().contains("failed")
+                            || line.toLowerCase().contains("error") && line.toLowerCase().contains("format")) {
+                        formatError = true;
+                    }
                 }
 
                 // Wait for the process to complete
                 int exitCode = process.waitFor();
                 System.out.println("Download completed with exit code: " + exitCode);
+
+                if (formatError || exitCode != 0) {
+                    System.out.println(
+                            "\nFormat or video type issue. Please select right format or type as per Youtube.");
+                    continue; // retry
+                }
                 break; // Exit the loop after successful download
             } catch (Exception e) {
                 System.err.println("Error downloading video: " + e.getMessage());
