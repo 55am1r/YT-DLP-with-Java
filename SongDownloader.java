@@ -2,38 +2,88 @@ import java.io.*;
 import java.net.URI;
 import java.util.Scanner;
 import java.net.URL;
+import java.util.regex.*;
 
 public class SongDownloader {
 
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
+        boolean listDownloadChoice = false;
         System.out.println("\n----->Welcome to the Song Downloader by PredatorFx!<------\n");
-        while (true) {
-            System.out.print("Enter URL to download: ");
-            String userUrl = scanner.nextLine();
-            if ((!userUrl.startsWith("http://") && !userUrl.startsWith("https://")) || userUrl.isEmpty()) {
-                System.out.println("\nInvalid URL. Please enter a valid URL starting with http:// or https://\n");
-                continue;
+        System.out.print("Enter URL to download: ");
+        String userUrl = scanner.nextLine();
+        if (isUrlSupportedByYtDlp(userUrl)) {
+            if (urlCheckToDownloadMusic(userUrl)) {
+                downloadAudio(userUrl, listDownloadChoice);
             } else {
-                if (urlCheckToDownloadMusic(userUrl)) {
-                    downloadAudio(userUrl);
-                    break;
-                } else {
-                    System.out.print("\nWant to download a Song or Video?\n(Press A for Audio, V for Video): ");
+                Pattern pattern = Pattern.compile("[?&]list=");
+                Matcher matcher = pattern.matcher(userUrl);
+                if (matcher.find()) {
+                    System.out.print("\n ***Your link contains list of Videos***\n");
+
+                    System.out.print(
+                            "\nDo you want to download All the Videos in the list?\n(Press Y for Yes, N for No): ");
+                    while (true) {
+                        String userChoice = scanner.nextLine().trim().toLowerCase();
+                        if (userChoice.equals("y")) {
+                            listDownloadChoice = true;
+                            break;
+                        } else if (userChoice.equals("n")) {
+                            listDownloadChoice = false;
+                            break;
+                        } else {
+                            System.out.print("\nInvalid choice. Please enter 'Y' for Yes or 'N' for No: ");
+                            continue;
+                        }
+                    }
+                }
+                System.out.print("\nWant to download a Song or Video?\n(Press A for Audio, V for Video): ");
+                while (true) {
                     String choice = scanner.nextLine().trim().toUpperCase();
                     if (choice.equals("A")) {
-                        downloadAudio(userUrl);
+                        downloadAudio(userUrl, listDownloadChoice);
                         break;
                     } else if (choice.equals("V")) {
-                        downloadVideo(userUrl);
+                        downloadVideo(userUrl, listDownloadChoice);
                         break;
                     } else {
-                        System.out.println("\nInvalid choice. Please enter A for Audio or V for Video.");
+                        System.out.println("\nInvalid choice. Please enter 'A' for Audio or 'V' for Video.");
+                        continue;
                     }
-                    break;
+                }
+            }
+        } else {
+            System.out.print(
+                    "\nThe URL you entered is not supported by yt-dlp. Please try again with a valid YouTube URL.");
+
+            System.out.println("Exiting the program. Goodbye!");
+        }
+
+    }
+
+    public static boolean isUrlSupportedByYtDlp(String url) {
+        try {
+            ProcessBuilder builder = new ProcessBuilder(
+                    "yt-dlp", "--simulate", url);
+            builder.redirectErrorStream(true);
+            Process process = builder.start();
+
+            BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.contains("ERROR:")) {
+                    System.out.println("Not supported: " + line);
+                    return false;
                 }
             }
 
+            int exitCode = process.waitFor();
+            return exitCode == 0;
+
+        } catch (Exception e) {
+            System.err.println("Failed to check URL: " + e.getMessage());
+            return false;
         }
     }
 
@@ -65,8 +115,10 @@ public class SongDownloader {
         return userUrl; // return as-is if '&' not found
     }
 
-    public static void downloadAudio(String userUrl) {
-        userUrl = getBaseYouTubeUrl(userUrl);
+    public static void downloadAudio(String userUrl, boolean listDownloadChoice) {
+        if (!listDownloadChoice) {
+            userUrl = getBaseYouTubeUrl(userUrl);
+        }
         System.out.println("\nDownloading audio...");
         // Replace with actual URL
         try {
@@ -100,8 +152,10 @@ public class SongDownloader {
         }
     }
 
-    public static void downloadVideo(String userUrl) {
-        userUrl = getBaseYouTubeUrl(userUrl);
+    public static void downloadVideo(String userUrl, boolean listDownloadChoice) {
+        if (!listDownloadChoice) {
+            userUrl = getBaseYouTubeUrl(userUrl);
+        }
         while (true) {
             Scanner scanner = new Scanner(System.in);
             String format = "";
@@ -168,7 +222,7 @@ public class SongDownloader {
                         "-f", "bv[height=" + format + "]+ba",
                         "--merge-output-format", videoType,
                         "--embed-thumbnail",
-                        "--add-metadata",
+                        "--add-metadata", "--postprocessor-args", "ffmpeg:-c:v h264_nvenc -preset fast -b:v 6M",
                         "-o",
                         // Adjust your loaction here
                         System.getProperty("user.home")
