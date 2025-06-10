@@ -1,7 +1,7 @@
 import java.io.*;
 import java.net.URI;
-import java.util.Scanner;
 import java.net.URL;
+import java.util.Scanner;
 import java.util.regex.*;
 
 public class SongDownloader {
