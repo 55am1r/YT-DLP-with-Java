@@ -222,7 +222,7 @@ public class SongDownloader {
                         "-f", "bv[height=" + format + "]+ba",
                         "--merge-output-format", videoType,
                         "--embed-thumbnail",
-                        "--add-metadata", "--postprocessor-args", "ffmpeg:-c:v h264_nvenc -preset fast -b:v 6M",
+                        "--add-metadata", "--postprocessor-args", "ffmpeg_i:-c:v h264_nvenc -preset fast -b:v 6M",
                         "-o",
                         // Adjust your loaction here
                         System.getProperty("user.home")
