@@ -46,7 +46,6 @@ public class SongDownloader {
                         break;
                     } else {
                         System.out.println("\nInvalid choice. Please enter 'A' for Audio or 'V' for Video.");
-                        continue;
                     }
                 }
             }
@@ -166,48 +165,30 @@ public class SongDownloader {
                         "1. 144p\t2. 240p\t3. 360p\t4. 480p\n5. 720p\t6. 1080p 7. 1440p 8. 2160p -->(Your choice): ");
                 int qualityChoice = scanner.nextInt();
                 switch (qualityChoice) {
-                    case 1:
-                        format = "144";
-                        break;
-                    case 2:
-                        format = "240";
-                        break;
-                    case 3:
-                        format = "360";
-                        break;
-                    case 4:
-                        format = "480";
-                        break;
-                    case 5:
-                        format = "720";
-                        break;
-                    case 6:
-                        format = "1080";
-                        break;
-                    case 7:
-                        format = "1440";
-                        break;
-                    case 8:
-                        format = "2160";
-                        break;
-                    default:
+                    case 1 -> format = "144";
+                    case 2 -> format = "240";
+                    case 3 -> format = "360";
+                    case 4 -> format = "480";
+                    case 5 -> format = "720";
+                    case 6 -> format = "1080";
+                    case 7 -> format = "1440";
+                    case 8 -> format = "2160";
+                    default -> {
                         System.out.println("Invalid choice. Defaulting to highest quality available.");
                         continue;
+                    }
                 }
                 System.out.println(
                         "\nIn Which Video Type do you want to download?");
                 System.out.print("1. MP4\t2. MKV -->(Your choice [defaulted to MP4]): ");
                 int videoTypeChoice = scanner.nextInt();
                 switch (videoTypeChoice) {
-                    case 1:
-                        videoType = "mp4";
-                        break;
-                    case 2:
-                        videoType = "mkv";
-                        break;
-                    default:
+                    case 1 -> videoType = "mp4";
+                    case 2 -> videoType = "mkv";
+                    default -> {
                         System.out.println("Invalid choice. Defaulting to MP4.");
                         videoType = "mp4";
+                    }
 
                 }
                 break;
@@ -255,7 +236,6 @@ public class SongDownloader {
                 break; // Exit the loop after successful download
             } catch (Exception e) {
                 System.err.println("Error downloading video: " + e.getMessage());
-                continue;
             }
         }
     }
