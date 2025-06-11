@@ -28,13 +28,11 @@ public class SongDownloader {
                         if (userChoice.equals("y")) {
                             listDownloadChoice = true;
                             break;
-                        } else if (userChoice.equals("n")) {
-                            listDownloadChoice = false;
-                            break;
-                        } else {
+                        } else if (!userChoice.equals("n")) {
                             System.out.print("\nInvalid choice. Please enter 'Y' for Yes or 'N' for No: ");
                             continue;
                         }
+                        break; // Exit the loop if 'N' is chosen
                     }
                 }
                 System.out.print("\nWant to download a Song or Video?\n(Press A for Audio, V for Video): ");
@@ -64,7 +62,7 @@ public class SongDownloader {
     public static boolean isUrlSupportedByYtDlp(String url) {
         try {
             ProcessBuilder builder = new ProcessBuilder(
-                    "yt-dlp", "--simulate", url);
+                    "yt-dlp", "--flat-playlist", "--simulate", url);
             builder.redirectErrorStream(true);
             Process process = builder.start();
 
@@ -144,9 +142,10 @@ public class SongDownloader {
                 System.out.println(line);
 
                 // Wait for the process to c
-                int exitCode = process.waitFor();
-                System.out.println("Download completed with exit code: " + exitCode);
+
             }
+            int exitCode = process.waitFor();
+            System.out.println("Download completed with exit code: " + exitCode);
         } catch (Exception e) {
             System.err.println("Error downloading song: " + e.getMessage());
         }
