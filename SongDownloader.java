@@ -1,6 +1,10 @@
+
 import java.io.*;
 import java.net.URI;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Scanner;
 import java.util.regex.*;
 
@@ -112,6 +116,47 @@ public class SongDownloader {
         return userUrl; // return as-is if '&' not found
     }
 
+    public static List<String> getAvailableResolutions(String videoUrl) {
+        List<String> resolutions = new ArrayList<>();
+
+        try {
+            ProcessBuilder builder = new ProcessBuilder(
+                    "yt-dlp",
+                    "--list-formats",
+                    videoUrl);
+            builder.redirectErrorStream(true);
+            Process process = builder.start();
+
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+
+            String line;
+            Pattern resolutionPattern = Pattern.compile("\\b(\\d{2,5}x\\d{2,5})\\b");
+
+            while ((line = reader.readLine()) != null) {
+                if (line.contains("video only") || line.contains("audio only")) {
+                    // parse video formats only
+                    Matcher matcher = resolutionPattern.matcher(line);
+                    if (matcher.find()) {
+                        String resolution = matcher.group(1);
+                        if (!resolutions.contains(resolution)) {
+                            resolutions.add(resolution);
+                        }
+                    }
+                }
+            }
+
+            process.waitFor();
+
+            // Sort in ascending order by height value
+            resolutions.sort(Comparator.comparingInt(res -> Integer.parseInt(res.split("x")[1])));
+
+        } catch (Exception e) {
+            System.err.println("Error while fetching resolutions: " + e.getMessage());
+        }
+
+        return resolutions;
+    }
+
     public static void downloadAudio(String userUrl, boolean listDownloadChoice) {
         if (!listDownloadChoice) {
             userUrl = getBaseYouTubeUrl(userUrl);
@@ -129,7 +174,7 @@ public class SongDownloader {
                     "-o",
                     // Adjust your loaction here
                     System.getProperty("user.home")
-                            + "/Downloads/%(title)s_%(uploader)s.%(ext)s",
+                    + "/Downloads/%(title)s_%(uploader)s.%(ext)s",
                     userUrl);
 
             builder.redirectErrorStream(true);
@@ -141,7 +186,6 @@ public class SongDownloader {
                 System.out.println(line);
 
                 // Wait for the process to c
-
             }
             int exitCode = process.waitFor();
             System.out.println("Download completed with exit code: " + exitCode);
@@ -151,6 +195,8 @@ public class SongDownloader {
     }
 
     public static void downloadVideo(String userUrl, boolean listDownloadChoice) {
+        List<String> result = getAvailableResolutions(userUrl);
+        System.out.println(result.get(1));
         if (!listDownloadChoice) {
             userUrl = getBaseYouTubeUrl(userUrl);
         }
@@ -160,31 +206,38 @@ public class SongDownloader {
             String videoType = "";
             while (true) {
                 System.out.println(
-                        "\nWhich Quality do you want to download?\n -->(Look in Youtube Quality Settings, Select the top quality available for your video)");
-                System.out.print(
-                        "1. 144p\t2. 240p\t3. 360p\t4. 480p\n5. 720p\t6. 1080p 7. 1440p 8. 2160p -->(Your choice): ");
-                int qualityChoice = scanner.nextInt();
-                switch (qualityChoice) {
-                    case 1 -> format = "144";
-                    case 2 -> format = "240";
-                    case 3 -> format = "360";
-                    case 4 -> format = "480";
-                    case 5 -> format = "720";
-                    case 6 -> format = "1080";
-                    case 7 -> format = "1440";
-                    case 8 -> format = "2160";
-                    default -> {
-                        System.out.println("Invalid choice. Defaulting to highest quality available.");
-                        continue;
-                    }
+                        "\nWhich Quality do you want to download?\n");
+                System.out.println("\nAvailable Video Resolutions:");
+                for (int i = 0; i < result.size(); i++) {
+                    System.out.print((i + 1) + ". " + result.get(i) + "\t");
                 }
+                int qualityChoice = scanner.nextInt();
+                format = qualityChoice > 0 && qualityChoice <= result.size() ? result.get(qualityChoice - 1).split("x")[1] : result.get(result.size() - 1).split("x")[1];
+                // switch (qualityChoice) {
+                //     case 1 -> format = "144";
+                //     case 2 -> format = "240";
+                //     case 3 -> format = "360";
+                //     case 4 -> format = "480";
+                //     case 5 -> format = "660";
+                //     case 6 -> format = "1080";
+                //     case 7 -> format = "1440";
+                //     case 8 -> format = "2160";
+                //     default -> {
+                //         System.out.println("Invalid choice. Defaulting to highest quality available.");
+                //         continue;
+                //     }
+                // }
                 System.out.println(
                         "\nIn Which Video Type do you want to download?");
-                System.out.print("1. MP4\t2. MKV -->(Your choice [defaulted to MP4]): ");
+                System.out.print("1. MP4\t2. MKV\t3. WEBM-->(Your choice [defaulted to MP4]): ");
                 int videoTypeChoice = scanner.nextInt();
                 switch (videoTypeChoice) {
-                    case 1 -> videoType = "mp4";
-                    case 2 -> videoType = "mkv";
+                    case 1 ->
+                        videoType = "mp4";
+                    case 2 ->
+                        videoType = "mkv";
+                    case 3 ->
+                        videoType = "webm";
                     default -> {
                         System.out.println("Invalid choice. Defaulting to MP4.");
                         videoType = "mp4";
@@ -206,7 +259,7 @@ public class SongDownloader {
                         "-o",
                         // Adjust your loaction here
                         System.getProperty("user.home")
-                                + "/Downloads/%(title)s_%(uploader)s.%(ext)s",
+                        + "/Downloads/%(title)s_%(uploader)s.%(ext)s",
                         userUrl);
 
                 builder.redirectErrorStream(true);
