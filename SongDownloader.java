@@ -1,5 +1,6 @@
 
 import java.io.*;
+import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
 import java.util.ArrayList;
@@ -40,16 +41,19 @@ public class SongDownloader {
                     }
                 }
                 System.out.print("\nWant to download a Song or Video?\n(Press A for Audio, V for Video): ");
+                OUTER:
                 while (true) {
                     String choice = scanner.nextLine().trim().toUpperCase();
-                    if (choice.equals("A")) {
-                        downloadAudio(userUrl, listDownloadChoice);
-                        break;
-                    } else if (choice.equals("V")) {
-                        downloadVideo(userUrl, listDownloadChoice);
-                        break;
-                    } else {
-                        System.out.println("\nInvalid choice. Please enter 'A' for Audio or 'V' for Video.");
+                    switch (choice) {
+                        case "A" -> {
+                            downloadAudio(userUrl, listDownloadChoice);
+                            break OUTER;
+                        }
+                        case "V" -> {
+                            downloadVideo(userUrl, listDownloadChoice);
+                            break OUTER;
+                        }
+                        default -> System.out.println("\nInvalid choice. Please enter 'A' for Audio or 'V' for Video.");
                     }
                 }
             }
@@ -82,7 +86,7 @@ public class SongDownloader {
             int exitCode = process.waitFor();
             return exitCode == 0;
 
-        } catch (Exception e) {
+        } catch (IOException | InterruptedException e) {
             System.err.println("Failed to check URL: " + e.getMessage());
             return false;
         }
@@ -92,13 +96,9 @@ public class SongDownloader {
         try {
             URI uri = URI.create(userUrl);
             URL url = uri.toURL(); // still uses toURL safely
-            if (url.getHost().contains("music.youtube")) {
-                return true;
-            }
-            return false;
+            return url.getHost().contains("music.youtube");
 
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (MalformedURLException e) {
             return false;
         }
     }
@@ -148,9 +148,9 @@ public class SongDownloader {
             process.waitFor();
 
             // Sort in ascending order by height value
-            resolutions.sort(Comparator.comparingInt(res -> Integer.parseInt(res.split("x")[1])));
+            resolutions.sort(Comparator.comparingInt(res -> Integer.valueOf(res.split("x")[1])));
 
-        } catch (Exception e) {
+        } catch (IOException | InterruptedException e) {
             System.err.println("Error while fetching resolutions: " + e.getMessage());
         }
 
@@ -189,7 +189,7 @@ public class SongDownloader {
             }
             int exitCode = process.waitFor();
             System.out.println("Download completed with exit code: " + exitCode);
-        } catch (Exception e) {
+        } catch (IOException | InterruptedException e) {
             System.err.println("Error downloading song: " + e.getMessage());
         }
     }
@@ -286,7 +286,7 @@ public class SongDownloader {
                     continue; // retry
                 }
                 break; // Exit the loop after successful download
-            } catch (Exception e) {
+            } catch (IOException | InterruptedException e) {
                 System.err.println("Error downloading video: " + e.getMessage());
             }
         }
