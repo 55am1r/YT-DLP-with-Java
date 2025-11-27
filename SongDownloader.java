@@ -196,7 +196,6 @@ public class SongDownloader {
 
     public static void downloadVideo(String userUrl, boolean listDownloadChoice) {
         List<String> result = getAvailableResolutions(userUrl);
-        System.out.println(result.get(1));
         if (!listDownloadChoice) {
             userUrl = getBaseYouTubeUrl(userUrl);
         }
@@ -205,12 +204,12 @@ public class SongDownloader {
             String format = "";
             String videoType = "";
             while (true) {
-                System.out.println(
-                        "\nWhich Quality do you want to download?\n");
                 System.out.println("\nAvailable Video Resolutions:");
                 for (int i = 0; i < result.size(); i++) {
                     System.out.print((i + 1) + ". " + result.get(i) + "\t");
                 }
+                System.out.print(
+                        "\n\nWhich Quality do you want to download : ");
                 int qualityChoice = scanner.nextInt();
                 format = qualityChoice > 0 && qualityChoice <= result.size() ? result.get(qualityChoice - 1).split("x")[1] : result.get(result.size() - 1).split("x")[1];
                 // switch (qualityChoice) {
