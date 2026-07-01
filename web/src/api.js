@@ -70,6 +70,18 @@ export async function getYtdlpStatus(refresh = false) {
   return res.json()
 }
 
+export async function pauseJob(id) {
+  await fetch(`/api/jobs/${id}/pause`, { method: 'POST' })
+}
+
+export async function resumeJob(id) {
+  await fetch(`/api/jobs/${id}/resume`, { method: 'POST' })
+}
+
+export async function cancelJob(id) {
+  await fetch(`/api/jobs/${id}/cancel`, { method: 'POST' })
+}
+
 export function fileUrl(id) {
   return `/api/jobs/${id}/file`
 }
