@@ -91,6 +91,21 @@ public class DownloadController {
         return jobs.subscribe(id);
     }
 
+    @PostMapping("/jobs/{id}/pause")
+    public Map<String, Object> pause(@PathVariable String id) {
+        return Map.of("ok", jobs.pause(id));
+    }
+
+    @PostMapping("/jobs/{id}/resume")
+    public Map<String, Object> resume(@PathVariable String id) {
+        return Map.of("ok", jobs.resume(id));
+    }
+
+    @PostMapping("/jobs/{id}/cancel")
+    public Map<String, Object> cancel(@PathVariable String id) {
+        return Map.of("ok", jobs.cancel(id));
+    }
+
     /** Stream the finished file to the requester's browser as a download. */
     @GetMapping("/jobs/{id}/file")
     public ResponseEntity<Resource> file(@PathVariable String id) throws IOException {

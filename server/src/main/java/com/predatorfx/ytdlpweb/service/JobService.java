@@ -100,8 +100,62 @@ public class JobService {
                 .toList();
     }
 
+    // ----------------------------------------------------------- CONTROLS
+
+    public boolean pause(String id) {
+        Job job = jobs.get(id);
+        if (job == null || job.getStatus() != JobStatus.DOWNLOADING) {
+            return false;
+        }
+        if (ytdlp.pause(id)) {
+            job.setStatus(JobStatus.PAUSED);
+            job.setPhase("Paused");
+            push(job);
+            return true;
+        }
+        return false;
+    }
+
+    public boolean resume(String id) {
+        Job job = jobs.get(id);
+        if (job == null || job.getStatus() != JobStatus.PAUSED) {
+            return false;
+        }
+        if (ytdlp.resume(id)) {
+            job.setStatus(JobStatus.DOWNLOADING);
+            job.setPhase("Resuming…");
+            push(job);
+            return true;
+        }
+        return false;
+    }
+
+    public boolean cancel(String id) {
+        Job job = jobs.get(id);
+        if (job == null || isTerminal(job.getStatus())) {
+            return false;
+        }
+        job.setCanceled(true);
+        job.setPhase("Canceling…");
+        push(job);
+        // If a process is live, killing it lets the worker finalize CANCELED + cleanup.
+        boolean running = ytdlp.cancel(id);
+        if (!running) {
+            // Not started yet (queued) — mark it canceled now; the worker will bail early.
+            job.setStatus(JobStatus.CANCELED);
+            job.setPhase("Canceled");
+            job.setFinishedAt(System.currentTimeMillis());
+            push(job);
+            completeEmitters(id);
+        }
+        return true;
+    }
+
     private void run(Job job) {
         try {
+            if (job.isCanceled()) {
+                return; // canceled while still queued
+            }
             // ---- The freshness guard the user asked for, before any real work ----
             job.setStatus(JobStatus.CHECKING_UPDATES);
             job.setPhase("Checking yt-dlp is up to date…");
@@ -114,12 +168,19 @@ public class JobService {
 
             ytdlp.download(job, this::push);
         } catch (Exception e) {
-            job.setStatus(JobStatus.FAILED);
-            job.setError(e.getMessage() == null ? e.toString() : e.getMessage());
-            job.setPhase("Failed");
-            job.setFinishedAt(System.currentTimeMillis());
-            log.warn("Job {} failed: {}", job.getId(), e.toString());
-            push(job);
+            if (job.isCanceled()) {
+                job.setStatus(JobStatus.CANCELED);
+                job.setPhase("Canceled");
+                job.setFinishedAt(System.currentTimeMillis());
+                push(job);
+            } else {
+                job.setStatus(JobStatus.FAILED);
+                job.setError(e.getMessage() == null ? e.toString() : e.getMessage());
+                job.setPhase("Failed");
+                job.setFinishedAt(System.currentTimeMillis());
+                log.warn("Job {} failed: {}", job.getId(), e.toString());
+                push(job);
+            }
         } finally {
             completeEmitters(job.getId());
         }
@@ -188,7 +249,7 @@ public class JobService {
     }
 
     private static boolean isTerminal(JobStatus s) {
-        return s == JobStatus.COMPLETED || s == JobStatus.FAILED;
+        return s == JobStatus.COMPLETED || s == JobStatus.FAILED || s == JobStatus.CANCELED;
     }
 
     // ------------------------------------------------------------- CLEANUP

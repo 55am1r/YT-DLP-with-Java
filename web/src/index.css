@@ -190,3 +190,11 @@ body {
   background: none; border: none; color: var(--accent-2); cursor: pointer;
   font: inherit; padding: 0; text-decoration: underline;
 }
+
+/* ---------- Job controls ---------- */
+.job-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.btn-ghost { background: var(--bg-2); border: 1px solid var(--border); color: var(--text); }
+.btn-ghost:hover:not(:disabled) { filter: none; border-color: #3a4152; background: var(--surface-2); }
+.btn-ghost.danger { color: var(--accent-2); }
+.btn-ghost.danger:hover:not(:disabled) { border-color: rgba(225, 29, 42, 0.5); background: rgba(225, 29, 42, 0.1); }
+.progress.paused .bar-fill { background: linear-gradient(90deg, #f5a623, #f7b955); }

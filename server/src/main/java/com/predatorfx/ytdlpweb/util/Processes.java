@@ -42,8 +42,9 @@ public final class Processes {
         return new Result(p.exitValue(), out.toString(), err.toString());
     }
 
-    /** Run a command streaming each stdout/stderr line to a consumer (for live progress). */
-    public static int stream(List<String> cmd, Path cwd, Consumer<String> onLine)
+    /** Run a command streaming each stdout/stderr line to a consumer (for live progress).
+     * {@code onStart} receives the Process so the caller can pause/cancel it. */
+    public static int stream(List<String> cmd, Path cwd, Consumer<Process> onStart, Consumer<String> onLine)
             throws IOException, InterruptedException {
         ProcessBuilder pb = new ProcessBuilder(cmd);
         applyPath(pb);
@@ -52,6 +53,9 @@ public final class Processes {
         }
         pb.redirectErrorStream(true);
         Process p = pb.start();
+        if (onStart != null) {
+            onStart.accept(p);
+        }
         try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = r.readLine()) != null) {

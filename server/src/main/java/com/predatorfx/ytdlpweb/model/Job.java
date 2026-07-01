@@ -28,6 +28,9 @@ public class Job {
     private final long createdAt = System.currentTimeMillis();
     private volatile Long finishedAt;
 
+    @JsonIgnore
+    private volatile boolean canceled = false;
+
     public Job(String id, DownloadRequest request) {
         this.id = id;
         this.request = request;
@@ -59,4 +62,8 @@ public class Job {
     public void setError(String error) { this.error = error; }
     public void setFilePath(Path filePath) { this.filePath = filePath; }
     public void setFinishedAt(Long finishedAt) { this.finishedAt = finishedAt; }
+
+    @JsonIgnore
+    public boolean isCanceled() { return canceled; }
+    public void setCanceled(boolean canceled) { this.canceled = canceled; }
 }

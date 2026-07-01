@@ -37,7 +37,7 @@ export default function Header() {
       <div className="brand">
         <div className="logo" aria-hidden="true">▼</div>
         <div>
-          <h1>EasyDownload</h1>
+          <h1>EZ-Tube</h1>
           <p className="muted">Download audio &amp; video from YouTube — for the team</p>
         </div>
       </div>

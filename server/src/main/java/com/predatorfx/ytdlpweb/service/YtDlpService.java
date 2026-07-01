@@ -20,8 +20,10 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -59,6 +61,9 @@ public class YtDlpService {
     private String workDirCfg;
 
     private final ObjectMapper mapper = new ObjectMapper();
+
+    /** Live yt-dlp processes by job id, so downloads can be paused/canceled. */
+    private final Map<String, Process> processes = new ConcurrentHashMap<>();
 
     public Path workDir() {
         return Path.of(workDirCfg);
@@ -153,6 +158,11 @@ public class YtDlpService {
         Path jobDir = workDir().resolve(job.getId());
         Files.createDirectories(jobDir);
 
+        if (job.isCanceled()) {
+            finishCanceled(job, jobDir, onUpdate);
+            return;
+        }
+
         List<String> cmd = buildCommand(req, jobDir);
         log.info("Job {} running: {}", job.getId(), String.join(" ", cmd));
 
@@ -161,7 +171,19 @@ public class YtDlpService {
         onUpdate.accept(job);
 
         int[] lastEmitted = {-1};
-        int exit = Processes.stream(cmd, jobDir, line -> handleLine(line, job, lastEmitted, onUpdate));
+        int exit;
+        try {
+            exit = Processes.stream(cmd, jobDir,
+                    proc -> processes.put(job.getId(), proc),
+                    line -> handleLine(line, job, lastEmitted, onUpdate));
+        } finally {
+            processes.remove(job.getId());
+        }
+
+        if (job.isCanceled()) {
+            finishCanceled(job, jobDir, onUpdate);
+            return;
+        }
         if (exit != 0) {
             throw new IOException("yt-dlp exited with code " + exit + " (see server log)");
         }
@@ -235,6 +257,9 @@ public class YtDlpService {
     }
 
     private void handleLine(String line, Job job, int[] lastEmitted, Consumer<Job> onUpdate) {
+        if (job.isCanceled() || job.getStatus() == JobStatus.PAUSED) {
+            return; // ignore output while paused or after cancel
+        }
         Matcher pt = PL_TITLE.matcher(line);
         if (pt.find()) {
             job.setTitle(pt.group(1).trim());
@@ -289,6 +314,79 @@ public class YtDlpService {
         job.setStatus(status);
         job.setPhase(phase);
         onUpdate.accept(job);
+    }
+
+    // ------------------------------------------------------------- CONTROLS
+
+    /** Suspend the download (SIGSTOP). Only meaningful while downloading. */
+    public boolean pause(String jobId) {
+        return signal(jobId, "-STOP");
+    }
+
+    /** Resume a suspended download (SIGCONT). */
+    public boolean resume(String jobId) {
+        return signal(jobId, "-CONT");
+    }
+
+    /** Force-kill the job's yt-dlp process (and any ffmpeg children). */
+    public boolean cancel(String jobId) {
+        Process p = processes.get(jobId);
+        if (p == null) {
+            return false;
+        }
+        p.descendants().forEach(ProcessHandle::destroyForcibly);
+        p.destroyForcibly();
+        return true;
+    }
+
+    private boolean signal(String jobId, String sig) {
+        Process p = processes.get(jobId);
+        if (p == null || !p.isAlive()) {
+            return false;
+        }
+        boolean ok = kill(sig, p.pid());
+        p.descendants().forEach(h -> kill(sig, h.pid()));
+        return ok;
+    }
+
+    private boolean kill(String sig, long pid) {
+        try {
+            Process k = new ProcessBuilder("/bin/kill", sig, Long.toString(pid)).start();
+            k.waitFor();
+            return k.exitValue() == 0;
+        } catch (IOException e) {
+            log.warn("kill {} {} failed: {}", sig, pid, e.toString());
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    private void finishCanceled(Job job, Path jobDir, Consumer<Job> onUpdate) {
+        deleteDirQuietly(jobDir);
+        job.setProgress(0);
+        job.setStatus(JobStatus.CANCELED);
+        job.setPhase("Canceled");
+        job.setFinishedAt(System.currentTimeMillis());
+        onUpdate.accept(job);
+    }
+
+    private static void deleteDirQuietly(Path dir) {
+        if (!Files.exists(dir)) {
+            return;
+        }
+        try (var walk = Files.walk(dir)) {
+            walk.sorted(Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException ignored) {
+                    // best effort
+                }
+            });
+        } catch (IOException ignored) {
+            // best effort
+        }
     }
 
     // -------------------------------------------------------------- FILE OUTPUT

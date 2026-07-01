@@ -6,8 +6,10 @@ public enum JobStatus {
     CHECKING_UPDATES,
     ANALYZING,
     DOWNLOADING,
+    PAUSED,
     PROCESSING,   // ffmpeg merge / thumbnail embed / metadata
     PACKAGING,    // zipping a playlist into one file
     COMPLETED,
+    CANCELED,
     FAILED
 }
