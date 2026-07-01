@@ -156,15 +156,8 @@ public class JobService {
             if (job.isCanceled()) {
                 return; // canceled while still queued
             }
-            // ---- The freshness guard the user asked for, before any real work ----
-            job.setStatus(JobStatus.CHECKING_UPDATES);
-            job.setPhase("Checking yt-dlp is up to date…");
-            push(job);
-            var status = updates.ensureFresh(false);
-            if (status.updated()) {
-                job.setPhase(status.message());
-                push(job);
-            }
+            // Keep yt-dlp fresh in the background — never block the download on it.
+            updates.refreshInBackground();
 
             ytdlp.download(job, this::push);
         } catch (Exception e) {
