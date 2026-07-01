@@ -1,0 +1,4 @@
+# Netlify serves the static redirect page in docs/ (no build step).
+# The redirect forwards visitors to the Mac's current Cloudflare tunnel URL.
+[build]
+  publish = "docs"
