@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ytdlp-studio",
+      "runtimeExecutable": "/usr/bin/java",
+      "runtimeArgs": ["-jar", "/Users/chaitusmediamac-shootteam/.ytdlp-web/build/libs/ytdlp-web-0.0.1-SNAPSHOT.jar"],
+      "port": 8080,
+      "autoPort": false
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Optional: auto-start the server on login/boot and restart it if it crashes.
+     Install:  cp deploy/com.predatorfx.ytdlp-web.plist ~/Library/LaunchAgents/
+               launchctl load ~/Library/LaunchAgents/com.predatorfx.ytdlp-web.plist
+     Stop:     launchctl unload ~/Library/LaunchAgents/com.predatorfx.ytdlp-web.plist
+     Logs:     /tmp/ytdlp-web.log
+     (Build the jar first with `bash build.sh`.) -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.predatorfx.ytdlp-web</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-lc</string>
+        <string>exec caffeinate -s java -jar "$HOME/.ytdlp-web/build/libs/ytdlp-web-0.0.1-SNAPSHOT.jar"</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/ytdlp-web.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/ytdlp-web.log</string>
+</dict>
+</plist>
