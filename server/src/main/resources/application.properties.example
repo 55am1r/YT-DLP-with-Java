@@ -1,0 +1,40 @@
+spring.application.name=ytdlp-web
+
+# --- Server: bind to all interfaces so the team can reach it on the LAN ---
+server.port=8080
+server.address=0.0.0.0
+
+# --- Never time out long-running downloads / SSE progress streams ---
+spring.mvc.async.request-timeout=-1
+
+# --- Surface ResponseStatusException reasons to the browser for helpful errors ---
+server.error.include-message=always
+
+# --- Team access login (cookie session). SET YOUR OWN before exposing publicly. ---
+# Copy this file to application.properties and change these. Do NOT commit real secrets.
+app.auth.enabled=true
+app.auth.username=team
+app.auth.password=CHANGE_ME
+
+# --- yt-dlp integration ---
+# Use ABSOLUTE paths: under launchd (LaunchAgent) Homebrew's bin is NOT on PATH, and
+# Java's ProcessBuilder resolves the program name against the JVM's inherited PATH
+# (it ignores per-subprocess env tweaks). Absolute paths avoid "error=2".
+# (Apple Silicon Homebrew = /opt/homebrew/bin; Intel = /usr/local/bin)
+ytdlp.bin=/opt/homebrew/bin/yt-dlp
+ffmpeg.bin=/opt/homebrew/bin/ffmpeg
+brew.bin=/opt/homebrew/bin/brew
+# yt-dlp installed via Homebrew updates with brew, NOT `yt-dlp -U` (which hangs).
+ytdlp.brew-formula=yt-dlp
+
+# --- Work directory: temp downloads live here. Point this at a disk with lots of space. ---
+ytdlp.work-dir=/absolute/path/to/YT-DLP-with-Java/.work
+
+# --- Concurrency: cap heavy jobs so many users can't overwhelm the machine ---
+ytdlp.max-concurrent-jobs=3
+
+# --- Freshness guard: re-check "is yt-dlp latest?" at most this often (minutes) ---
+ytdlp.update-check-interval-minutes=180
+
+# --- Cleanup: delete a finished job's files this many minutes after it completes ---
+ytdlp.file-ttl-minutes=120

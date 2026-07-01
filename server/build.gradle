@@ -1,0 +1,46 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '4.1.0'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.predatorfx'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// This project lives on the 5amServer volume, an SMB/exFAT-style mount that
+// creates AppleDouble "._*" sidecar files for every file's macOS xattrs. Those
+// break Gradle's output cleanup and would pollute the jar. Keep build outputs on
+// the local APFS disk (native xattrs -> no "._*"), and exclude the sidecars.
+// ---------------------------------------------------------------------------
+layout.buildDirectory.set(file("${System.getProperty('user.home')}/.ytdlp-web/build"))
+
+sourceSets {
+	main {
+		java { exclude '**/._*' }
+		resources { exclude '**/._*', '**/.DS_Store' }
+	}
+	test {
+		java { exclude '**/._*' }
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}

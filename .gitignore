@@ -1,0 +1,17 @@
+# Build outputs
+web/node_modules/
+web/dist/
+server/build/
+server/src/main/resources/static/
+.work/
+
+# macOS AppleDouble / metadata (this volume spawns these)
+._*
+.DS_Store
+
+# Logs
+*.log
+
+# Local secrets / machine-specific config — copy application.properties.example
+# to application.properties and set your own password. Never commit real secrets.
+server/src/main/resources/application.properties

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Optional: run the free Cloudflare quick tunnel as an always-on service so the
+     app is reachable from any network. The public URL changes whenever this
+     restarts; fetch the current one with `bash tunnel-url.sh`.
+     Install:  cp deploy/com.predatorfx.ytdlp-tunnel.plist ~/Library/LaunchAgents/
+               launchctl load ~/Library/LaunchAgents/com.predatorfx.ytdlp-tunnel.plist
+     Logs / current URL source: /tmp/ytdlp-tunnel.log -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.predatorfx.ytdlp-tunnel</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/cloudflared</string>
+        <string>tunnel</string>
+        <string>--url</string>
+        <string>http://localhost:8080</string>
+        <string>--no-autoupdate</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/ytdlp-tunnel.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/ytdlp-tunnel.log</string>
+</dict>
+</plist>
