@@ -43,18 +43,37 @@ export default function App() {
     }
   }
 
+  // Poll a job's progress. SSE would be nicer, but it gets buffered by the Cloudflare
+  // tunnel the team uses (progress looks frozen, then jumps to done). Polling is plain
+  // GETs that stream reliably through any proxy — tunnel, Netlify redirect, or direct.
   function track(id) {
     if (sources.current.has(id)) return
-    const es = new EventSource(`/api/jobs/${id}/events`)
-    sources.current.set(id, es)
-    es.addEventListener('update', (e) => {
-      const job = JSON.parse(e.data)
-      setJobs((prev) => prev.map((j) => (j.id === job.id ? { ...j, ...job } : j)))
-      if (job.status === 'COMPLETED' || job.status === 'FAILED') {
-        es.close()
-        sources.current.delete(id)
+    let timer = null
+    const stop = () => {
+      if (timer) clearInterval(timer)
+      sources.current.delete(id)
+    }
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/jobs/${id}`)
+        if (res.status === 401) {
+          stop()
+          setAuthed(false)
+          return
+        }
+        if (!res.ok) return
+        const job = await res.json()
+        setJobs((prev) => prev.map((j) => (j.id === job.id ? { ...j, ...job } : j)))
+        if (job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELED') {
+          stop()
+        }
+      } catch {
+        // transient hiccup — keep polling
       }
-    })
+    }
+    timer = setInterval(tick, 800)
+    sources.current.set(id, { close: stop })
+    tick()
   }
 
   async function onStart(request) {
