@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Auto-updates the public redirect page whenever the Cloudflare tunnel URL changes
+     (e.g. after a reboot), so the team's Netlify link needs no manual re-pointing.
+     Install:
+       cp deploy/com.predatorfx.ytdlp-redirect.plist ~/Library/LaunchAgents/
+       launchctl load -w ~/Library/LaunchAgents/com.predatorfx.ytdlp-redirect.plist
+     Log: /tmp/ytdlp-redirect.log -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.predatorfx.ytdlp-redirect</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Volumes/5amServer/My Progress/Editing Tools/Sameer/YT-DLP-with-Java/auto-redirect.sh</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/ytdlp-redirect.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/ytdlp-redirect.log</string>
+</dict>
+</plist>
