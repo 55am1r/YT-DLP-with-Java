@@ -5,6 +5,7 @@ import com.predatorfx.ytdlpweb.util.Processes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -13,16 +14,17 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * The "freshness guard" the user asked for: before any download runs, make sure
- * yt-dlp is current. Outdated yt-dlp is the #1 cause of downloads silently failing.
+ * The "freshness guard": keeps yt-dlp current so downloads don't silently break.
+ * Runs in the BACKGROUND (startup + a periodic schedule) — never on a download's
+ * critical path — so a slow brew/network check can't stall a user's download.
  *
  * IMPORTANT: yt-dlp here is installed via Homebrew, so we update with
  * `brew upgrade yt-dlp`. We must NOT call `yt-dlp -U` — on brew installs it hangs.
  *
- * The result is cached for {@code ytdlp.update-check-interval-minutes} so we don't
- * hit the network on every single request.
+ * Results are cached for {@code ytdlp.update-check-interval-minutes}.
  */
 @Service
 public class YtDlpUpdateService {
@@ -50,6 +52,7 @@ public class YtDlpUpdateService {
     private volatile String latest;
     private volatile long lastCheck = 0L;
     private volatile String lastMessage = "Not checked yet";
+    private final AtomicBoolean refreshing = new AtomicBoolean(false);
 
     public record UpdateStatus(String installed, String latest, boolean upToDate, boolean updated, String message) {}
 
@@ -93,6 +96,38 @@ public class YtDlpUpdateService {
     /** Last known status without triggering any check. */
     public UpdateStatus current() {
         return new UpdateStatus(installed, latest, isUpToDate(), false, lastMessage);
+    }
+
+    /**
+     * Kick off a freshness check in the BACKGROUND if the cache is stale, and return
+     * immediately. Keeps yt-dlp current without ever blocking a download.
+     */
+    public void refreshInBackground() {
+        if (!isStale() || !refreshing.compareAndSet(false, true)) {
+            return;
+        }
+        Thread t = new Thread(() -> {
+            try {
+                ensureFresh(false);
+            } catch (Exception e) {
+                log.warn("Background yt-dlp refresh failed: {}", e.toString());
+            } finally {
+                refreshing.set(false);
+            }
+        }, "ytdlp-refresh");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** Periodically keep yt-dlp fresh in the background (no user request waits on it). */
+    @Scheduled(fixedDelay = 30 * 60 * 1000L, initialDelay = 30 * 60 * 1000L)
+    public void scheduledRefresh() {
+        refreshInBackground();
+    }
+
+    private boolean isStale() {
+        return installed == null
+                || (System.currentTimeMillis() - lastCheck) > Duration.ofMinutes(intervalMinutes).toMillis();
     }
 
     private boolean isUpToDate() {

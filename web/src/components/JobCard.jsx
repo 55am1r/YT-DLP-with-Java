@@ -20,7 +20,7 @@ export default function JobCard({ job }) {
   const done = job.status === 'COMPLETED'
   const paused = job.status === 'PAUSED'
   const bad = job.status === 'FAILED' || job.status === 'CANCELED'
-  const indet = INDETERMINATE.has(job.status)
+  const indet = INDETERMINATE.has(job.status) || (job.status === 'DOWNLOADING' && (job.progress || 0) === 0)
   const pct = Math.max(0, Math.min(100, job.progress || 0))
   const canPause = job.status === 'DOWNLOADING'
   const canCancel = ACTIVE.has(job.status)
