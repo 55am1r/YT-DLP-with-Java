@@ -1,187 +1,304 @@
-# YT-DLP Studio
+# EZ-Tube
 
-A self-hosted web app for downloading audio & video from YouTube, built on top of
-the original `SongDownloader.java` yt-dlp logic. You run it on your Mac; your team
-opens it in a browser over the LAN and the files download to **their** machines.
+A self-hosted web application for downloading audio and video from YouTube, built for
+a production team that needs source-quality media on demand.
 
-- **Frontend:** React (Vite)
-- **Backend:** Java 21 + Spring Boot 4, wrapping `yt-dlp` + `ffmpeg`
-- **Cost:** free — runs on your own hardware, no cloud, no hosting bills
+One machine runs the server. Everyone else opens a link in their browser, picks what
+they want, and the finished file downloads to **their own** computer. No per-seat
+licences, no upload limits, no third-party site covered in adverts, and nothing leaves
+hardware you control.
 
----
-
-## What it does
-
-- 🎵 **Audio** — extract MP3 / M4A / OPUS / WAV with embedded thumbnail + metadata
-- 🎬 **Video** — pick resolution (up to 4K/8K) and container (MP4 / MKV / WEBM),
-  merged **losslessly** (no re-encoding, so 4K stays true 4K)
-- 📃 **Playlists** — download an entire playlist, delivered as a single `.zip`
-- 🔄 **yt-dlp freshness guard** — before any job runs, the server checks whether
-  yt-dlp is outdated and **auto-updates it via Homebrew** first. Outdated yt-dlp is
-  the #1 cause of downloads silently breaking, so this is built in.
-- 📊 **Live progress** — real-time progress bars over Server-Sent Events
-- 🧵 **Concurrency cap** — a small worker pool + queue so 30–40 people can't
-  overwhelm the Mac with simultaneous 4K downloads
+| | |
+|---|---|
+| **Frontend** | React 19 + Vite |
+| **Backend** | Java 21 + Spring Boot 4 |
+| **Media engine** | `yt-dlp` + `ffmpeg` / `ffprobe` |
+| **Runs on** | macOS (Apple Silicon or Intel), self-hosted |
+| **Cost** | Free — your own hardware, no cloud bill |
 
 ---
 
-## Prerequisites (already installed on this Mac)
+## Why it exists
 
-| Tool | Notes |
-|------|-------|
-| Java 21 | Temurin |
-| yt-dlp | installed via Homebrew (so updates use `brew upgrade`, **not** `yt-dlp -U`) |
-| ffmpeg | for merging/encoding |
-| Node + npm | for building the React UI |
+Off-the-shelf download sites cap resolution, inject adverts, re-encode silently, and
+break whenever YouTube changes something. This build removes those constraints:
 
-If you move this to another Mac: `brew install yt-dlp ffmpeg node temurin`.
+- **True source quality.** Video and audio streams are merged **losslessly** by
+  default, so a 4K60 source stays 4K60 — no generational quality loss.
+- **It keeps working.** An outdated `yt-dlp` is the single most common cause of
+  downloads failing without explanation. The server checks its own version and
+  updates itself before that becomes your problem.
+- **It scales to a team.** A bounded worker pool means thirty people clicking
+  *Download* at once queues neatly instead of overwhelming the machine.
+- **It respects the machine.** Finished files are swept automatically, duplicate
+  requests are caught before they cost bandwidth, and heavy work is capped.
 
 ---
 
-## Build & run
+## Features
+
+### Media selection
+
+- **Any YouTube link** — single video, playlist, Shorts, or YouTube Music.
+- **Real format detection.** Quality options come from the formats that specific
+  video actually publishes, not a fixed list, so nothing is offered that can't be
+  delivered. Labels use broadcast shorthand — `2160p · UHD`, `1440p · QHD`,
+  `1080p · FHD`.
+- **Audio extraction** — MP3, M4A, OPUS or WAV, with metadata and embedded cover art
+  where the container supports it.
+- **Per-link tabs.** Several links can be analysed at once, each with its own
+  settings and its own download list.
+- **Refresh control.** A per-item refresh re-reads one link's available formats from
+  the server without reloading the page or disturbing other work in progress.
+
+### Auto / Advanced format modes
+
+Every format choice — globally and for each playlist item — follows the same shape:
+
+```
+Video ─┬─ Auto      → MP4, original quality         → resolution → download
+       └─ Advanced  → container → compression model → resolution → download
+```
+
+- **Auto** is MP4 with no re-encoding: fastest, and nothing is lost.
+- **Advanced** exposes the container (MP4 / MKV / WEBM) and the compression model.
+
+### Compression models
+
+Offered options are filtered against what the host's `ffmpeg` actually reports at
+startup, and against what the chosen container can legally hold — H.265 is never
+offered inside WEBM, because WEBM cannot store it.
+
+| Model | Measured size | Notes |
+|---|---|---|
+| **Original** | full size | No re-encode. Best quality, fastest. |
+| **H.265 / HEVC** | 65–90% | *Recommended.* Encoded on the Mac's media engine, so it stays quick. |
+| **H.264 / AVC** | 80–90% | Maximum compatibility — older phones, TVs, editing suites. |
+| **AV1** | 40–55% | *Best savings.* Software-encoded, so noticeably slower. |
+| **VP9** | ~100% | For players that require VP9; does not shrink YouTube sources. |
+
+Every figure above was **measured on real downloads**, not taken from codec
+marketing. This matters: YouTube already ships efficient AV1/VP9, so a quality-based
+encoder setting produces files *larger* than the original — one measurement returned
+441 MB from a 101 MB source. Rate control therefore targets a share of the source
+bitrate, which is what makes the advertised saving actually happen. VP9 is labelled
+honestly rather than implying a saving it cannot deliver.
+
+On Apple Silicon, H.265 and H.264 run on the hardware media engine, so a 4K clip
+finishes in minutes rather than hours and the CPU stays free for other jobs.
+
+### Playlists
+
+- **Per-item control.** Tick individual videos; each carries its own type
+  (video/audio), quality, container and compression. One playlist can produce some
+  MP4s and some MP3s in a single pass.
+- **Honest zip gating.** "Download all as one `.zip`" is offered **only** when every
+  item genuinely offers the same resolutions, and then only at those shared
+  resolutions. Otherwise the reason is shown and the list switches to per-item
+  selection — a single quality setting across items that don't share it would
+  quietly hand people different files.
+
+### Downloads and job control
+
+- **Live progress** with transfer speed, ETA, elapsed time and final file size.
+- **Pause, resume and cancel** on any running job.
+- **Trimming** via a YouTube-style range slider, cut at keyframes. If the pasted link
+  carries a timestamp (`?t=90`), the slider opens pre-set to it; trimming is opt-in
+  and revertible.
+- **Duplicate guard.** A request that would re-download an identical file is caught
+  and offered as a choice: reuse the copy already on the server, or download it
+  again. This is the main defence against the same 4K video being fetched and stored
+  five times by five people.
+- **Automatic cleanup.** Finished files carry a visible countdown and are deleted on
+  a TTL, so the disk doesn't silently fill.
+
+### Reliability
+
+- **yt-dlp freshness guard.** The server compares its installed version against the
+  latest release and runs `brew upgrade` when behind. This runs in the background and
+  never blocks a download.
+- **Concurrency cap.** A bounded worker pool with a queue; the limit is configurable.
+- **Transfer retries.** Fragment and extractor retries, added after testing showed
+  YouTube intermittently dropping fragments under parallel load — failures that
+  succeeded on a second attempt.
+
+### Interface
+
+- **Responsive across screen sizes.** Below 750px the layout goes full-bleed and
+  re-stacks — thumbnails go full width above their controls rather than shrinking
+  into stamps — so a phone feels like an app rather than a scaled-down web page.
+- **Responsive images.** Thumbnails ship a `srcset`, so a phone fetches a small
+  variant instead of downloading a full-size image to draw it a few hundred pixels
+  wide — a meaningful saving across a playlist of twenty.
+- **True-shape thumbnails.** The preview frame takes the image's own aspect ratio and
+  never crops, so vertical Shorts stay vertical and nothing is trimmed off.
+- **Light and dark themes**, each with its own tuned control surfaces.
+- **Session login.** Cookie-based auth, credentials kept out of version control.
+
+---
+
+## Requirements
+
+| Tool | Purpose |
+|------|---------|
+| Java 21 | Runs the backend |
+| Node + npm | Builds the React UI |
+| `yt-dlp` | Media extraction |
+| `ffmpeg` (with `ffprobe`) | Merging, compression, inspection |
+| Homebrew | Used by the self-update guard |
 
 ```bash
-bash build.sh     # builds the React UI + the runnable jar
-bash start.sh     # starts the server and prints your team's URL
+brew install yt-dlp ffmpeg node temurin
 ```
 
-`start.sh` prints something like:
-
-```
-On this Mac:   http://localhost:8080
-For your team: http://192.168.1.10:8080
-```
-
-Share the **team** URL. Keep the window open (it uses `caffeinate` to keep the Mac
-awake while serving). Press `Ctrl-C` to stop.
-
-### First-time team access (macOS firewall)
-
-If macOS blocks incoming connections, allow `java`:
-**System Settings → Network → Firewall → Options → allow incoming for Java** —
-or temporarily turn the firewall off on the trusted LAN. Everyone must be on the
-same network as the Mac.
+> `yt-dlp` installed via Homebrew must be updated with `brew upgrade` — `yt-dlp -U`
+> hangs on a brew-managed install. The freshness guard already accounts for this.
 
 ---
 
-## Keep it always-on (optional)
+## Setup
 
-Auto-start on login and restart on crash with the included LaunchAgent:
+1. **Create your configuration** (this file is deliberately not in version control):
+
+   ```bash
+   cp server/src/main/resources/application.properties.example \
+      server/src/main/resources/application.properties
+   ```
+
+2. **Edit it** and set, at minimum:
+   - `app.auth.username` / `app.auth.password` — your own credentials
+   - `ytdlp.work-dir` — an absolute path on a disk with room for temporary files
+   - `ytdlp.bin` / `ffmpeg.bin` / `brew.bin` — absolute paths
+
+   Absolute binary paths are required: under `launchd`, Homebrew's `bin` is not on
+   `PATH`, and Java's `ProcessBuilder` resolves program names against the JVM's
+   inherited `PATH`.
+
+3. **Build and run:**
+
+   ```bash
+   bash build.sh     # builds the React UI, then the runnable jar
+   bash start.sh     # starts the server and prints the URL to share
+   ```
+
+`start.sh` prints both a local address and your machine's LAN address. Share the LAN
+one with the team. If macOS blocks incoming connections, allow `java` in
+**System Settings → Network → Firewall → Options**.
+
+### Always-on service
+
+`deploy/` contains LaunchAgent templates so the server starts at login and restarts if
+it exits:
 
 ```bash
 cp deploy/com.predatorfx.ytdlp-web.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.predatorfx.ytdlp-web.plist   # start
-launchctl unload ~/Library/LaunchAgents/com.predatorfx.ytdlp-web.plist # stop
-# logs: /tmp/ytdlp-web.log
+launchctl load -w ~/Library/LaunchAgents/com.predatorfx.ytdlp-web.plist
 ```
 
-(Run `bash build.sh` at least once first.)
+`restart.sh` rebuilds and reloads the service in one step after a code change.
+
+### Access beyond the LAN
+
+For teammates on other networks, the deployment scripts support a Cloudflare tunnel
+that publishes the login-protected app over HTTPS. Free "quick" tunnels mint a new
+hostname on every restart; a named tunnel on your own domain gives a stable address
+and materially better throughput.
 
 ---
 
-## Remote access from any network (Cloudflare tunnel)
-
-Your `192.168.1.10` address only works on the office LAN. To let the team download
-from any Wi-Fi, the app is exposed through a **free, unmetered Cloudflare tunnel**,
-protected by the team password.
-
-Install the tunnel as an always-on service (once):
-
-    cp deploy/com.predatorfx.ytdlp-tunnel.plist ~/Library/LaunchAgents/
-    launchctl load -w ~/Library/LaunchAgents/com.predatorfx.ytdlp-tunnel.plist
-
-Get the current public URL to share with the team:
-
-    bash tunnel-url.sh        # prints https://<something>.trycloudflare.com
-
-Teammates open that URL on any network and log in with the team password.
-
-> **Note:** the free (no-domain) tunnel URL **changes when the tunnel restarts**
-> (e.g. after a reboot). Re-run `bash tunnel-url.sh` and re-share it. For a **permanent
-> fixed URL** (e.g. `download.chaitusmedia.com`), a domain on a free Cloudflare account
-> enables a named tunnel — also free and more robust.
-
-### Change the team login
-
-The site shows a login page; the session stays until the browser is fully closed
-(a cookie with no expiry — survives refreshes and server restarts). Change the
-credentials in `server/src/main/resources/application.properties`, then `bash restart.sh`:
-
-    app.auth.username=your-team-username
-    app.auth.password=your-strong-password   # keep the real one out of git
-
----
-
-## Configuration
-
-Edit `server/src/main/resources/application.properties` (rebuild after changes):
+## Configuration reference
 
 | Key | Default | Meaning |
 |-----|---------|---------|
-| `server.port` | `8080` | Port the site listens on |
-| `ytdlp.work-dir` | `…/YT-DLP-with-Java/.work` | Where temp downloads land (on the 460 GB volume, not the 63 GB system disk) |
-| `ytdlp.max-concurrent-jobs` | `3` | Simultaneous heavy downloads; the rest queue |
-| `ytdlp.update-check-interval-minutes` | `180` | How often to re-check that yt-dlp is current |
-| `ytdlp.file-ttl-minutes` | `120` | How long a finished file stays before cleanup |
+| `server.port` | `8080` | Port the app listens on |
+| `server.address` | `0.0.0.0` | Bind to all interfaces so the LAN can reach it |
+| `app.auth.enabled` | `true` | Require login |
+| `app.auth.username` / `app.auth.password` | — | Team credentials; keep out of git |
+| `ytdlp.work-dir` | — | Where temporary downloads land |
+| `ytdlp.max-concurrent-jobs` | `3` | Simultaneous heavy jobs; the rest queue |
+| `ytdlp.update-check-interval-minutes` | `180` | How often to re-check yt-dlp |
+| `ytdlp.file-ttl-minutes` | `120` | How long a finished file survives |
 
 ---
 
-## How it works (the non-obvious bits)
+## Development
 
-- **Freshness guard uses Homebrew.** yt-dlp here is a brew formula, so
-  `yt-dlp -U` doesn't work (it hangs). The guard reads the installed version,
-  compares it to the latest GitHub release, and runs `brew upgrade yt-dlp` only
-  when behind — cached so it doesn't hit the network on every request.
-- **No re-encoding.** The original CLI re-encoded with `h264_nvenc` (NVIDIA-only,
-  absent on Macs). We download best-video + best-audio and merge streams, which is
-  faster and preserves original quality. If a player ever struggles with a codec
-  (YouTube 4K is VP9/AV1), pick **MKV** — it holds anything without conversion.
-- **Robust quality selection.** Uses `bestvideo[height<=N]+bestaudio`, so a chosen
-  quality never triggers the "Requested format is not available" retry loop.
-- **Build outputs live on the local disk** (`~/.ytdlp-web/build`) because this
-  project sits on an SMB/exFAT volume that spawns AppleDouble `._*` files, which
-  otherwise break Gradle's cleanup.
-
----
-
-## Development (hot reload)
-
-Run the backend and the Vite dev server separately:
+Run the backend and the Vite dev server separately for hot reload:
 
 ```bash
 # terminal 1 — backend on :8080
 cd server && sh gradlew bootRun
 
-# terminal 2 — UI on :5173 with hot reload (proxies /api to :8080)
+# terminal 2 — UI on :5173, proxies /api to :8080
 cd web && npm run dev
 ```
 
-Open http://localhost:5173.
-
----
-
-## Project structure
+### Project structure
 
 ```
-YT-DLP-with-Java/
-├── build.sh / start.sh            # one-command build & run
-├── deploy/…plist                  # optional auto-start LaunchAgent
-├── SongDownloader.java            # the original CLI (kept for reference)
-├── server/                        # Spring Boot backend
+.
+├── build.sh / start.sh / restart.sh    # build, run, redeploy
+├── deploy/                             # LaunchAgent templates
+├── legacy/SongDownloader.java          # the original CLI this grew from
+├── server/                             # Spring Boot backend
 │   └── src/main/java/com/predatorfx/ytdlpweb/
-│       ├── service/               # YtDlpService, YtDlpUpdateService, JobService
-│       ├── web/                   # REST controller + CORS
-│       └── model/                 # Job, DownloadRequest, AnalyzeResult, …
-└── web/                           # React frontend (Vite)
+│       ├── service/                    # YtDlpService, CodecCatalog, JobService,
+│       │                               #   YtDlpUpdateService
+│       ├── web/                        # REST controllers, auth filter
+│       └── model/                      # Job, DownloadRequest, AnalyzeResult, …
+└── web/                                # React frontend
     └── src/{App.jsx, api.js, components/}
 ```
 
+### HTTP API
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/api/analyze` | Probe a URL: metadata, formats, playlist items |
+| `GET` | `/api/codecs` | Compression models this host can deliver |
+| `GET` | `/api/playlist/formats` | Whether a playlist's items share resolutions |
+| `POST` | `/api/jobs` | Queue a download (`409` when it would duplicate one) |
+| `GET` | `/api/jobs/{id}` | Job status |
+| `GET` | `/api/jobs/{id}/file` | Download the finished file |
+| `POST` | `/api/jobs/{id}/pause` · `/resume` · `/cancel` | Job control |
+| `GET` | `/api/ytdlp/status` | Version / freshness of yt-dlp |
+
 ---
 
-## Notes
+## Implementation notes
 
-- **Internal use.** This is an internal team tool. Downloading depends on the
-  source site's terms; use it for content you're permitted to download.
-- **Security.** There's no login — it assumes a trusted LAN. Don't expose port
-  8080 to the public internet. If you later need auth or public access, that's a
-  follow-up.
+Details that are not obvious from the code, recorded because each cost real debugging
+time:
+
+- **Lossless by default.** The original CLI re-encoded with `h264_nvenc`, which is
+  NVIDIA-only and unavailable on a Mac. Streams are merged instead, which is both
+  faster and lossless.
+- **WEBM needs constrained stream selection.** WEBM can only hold VP8/VP9/AV1 video
+  with Opus/Vorbis audio. A plain "best video + best audio" pick returns AVC1 + M4A,
+  and merging that into `.webm` fails outright — every WEBM download failed until the
+  selection was restricted for that container specifically.
+- **Compression targets bitrate, not quality.** See the compression table above.
+- **SVT-AV1 rejects a rate cap** outside CRF mode and refuses to start, so the cap is
+  applied only to the VideoToolbox encoders.
+- **Thumbnails are matched by aspect.** YouTube serves several per video, and for
+  Shorts the default is a padded 4:3 image; the set is filtered to the video's shape
+  so vertical content doesn't render letterboxed inside a wide frame.
+- **Build output is relocated** to a local disk, because this project can live on a
+  network volume where macOS AppleDouble (`._*`) files break Gradle's cleanup.
+- **Progress is polled, not streamed.** Server-Sent Events are buffered by some
+  reverse proxies, which made progress appear frozen and then jump to complete.
+
+---
+
+## Notes on use
+
+- **Internal tool.** Downloading is governed by the source site's terms — use it for
+  content you are permitted to download.
+- **Credentials.** `application.properties` is excluded from version control. Never
+  commit real credentials; rotate them if they are ever exposed.
+- **Exposure.** The app is login-protected, but treat any public tunnel address as
+  sensitive and share it only with the team.
+
+---
+
+<sub>Built by PredatorFX · for ChaitusMedia team use</sub>
