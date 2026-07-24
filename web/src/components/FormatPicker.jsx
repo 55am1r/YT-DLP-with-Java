@@ -92,7 +92,7 @@ export default function FormatPicker({ value, codecs, onChange, compact = false 
 
           <div className="field">
             <label>Compression</label>
-            <div className="pills">
+            <div className="pills pills-wide">
               {usable.map((c) => (
                 <button
                   key={c.id}
