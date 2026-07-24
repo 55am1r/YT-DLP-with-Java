@@ -265,6 +265,52 @@ body {
 .login-card .input { width: 100%; text-align: left; }
 .login-card .error { margin: 0; text-align: left; }
 
+/* ---------- Font Awesome ---------- */
+/* Icons inherit currentColor, so they follow the theme automatically. */
+.btn i, .pill i, .seg-btn i, .icon-btn i, .badge i, .job-info i, .tab i { font-size: 0.92em; line-height: 1; }
+.logo i, .login-logo i { font-size: 22px; }
+.login-logo i { font-size: 26px; }
+
+/* ---------- Playlist header ---------- */
+.pl-header { display: flex; gap: 14px; align-items: center; margin-bottom: 14px; }
+
+/* ---------- Trim slider ---------- */
+.trim { padding: 4px 2px 0; }
+.trim-track { position: relative; height: 34px; }
+.trim-track::before {
+  content: ''; position: absolute; top: 15px; left: 0; right: 0; height: 4px;
+  background: var(--bg-2); border-radius: 999px;
+}
+.trim-range {
+  position: absolute; top: 15px; height: 4px; border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+.trim-input {
+  position: absolute; top: 0; left: 0; width: 100%; height: 34px; margin: 0;
+  background: transparent; pointer-events: none;
+  -webkit-appearance: none; appearance: none;
+}
+.trim-input:focus { outline: none; }
+.trim-input::-webkit-slider-thumb {
+  -webkit-appearance: none; pointer-events: auto; width: 18px; height: 18px;
+  border-radius: 50%; background: #fff; border: 3px solid var(--accent); cursor: grab;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.trim-input::-webkit-slider-thumb:active { cursor: grabbing; transform: scale(1.08); }
+.trim-input::-moz-range-thumb {
+  pointer-events: auto; width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; border: 3px solid var(--accent); cursor: grab;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.trim-labels { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; margin-top: 2px; }
+.trim-time { color: var(--text); font-weight: 600; }
+.trim-dur { color: var(--accent-2); font-weight: 600; }
+.trim-hint { color: var(--warn); text-transform: none; letter-spacing: 0; font-weight: 600; }
+.trim-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+/* smaller pills for per-item playlist choices */
+.pill.sm { padding: 5px 10px; font-size: 11.5px; border-radius: 8px; }
+
 /* ---------- Misc ---------- */
 .muted { color: var(--muted); }
 .foot { text-align: center; padding: 18px; font-size: 12px; }

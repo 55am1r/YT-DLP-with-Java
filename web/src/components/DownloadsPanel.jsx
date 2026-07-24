@@ -13,7 +13,7 @@ export default function DownloadsPanel({ jobs, onClear, onExpired, clearing }) {
       <div className="dl-head">
         <h2 className="section-title">Downloads</h2>
         <button className="btn btn-sm" onClick={onClear} disabled={!clearable || clearing} title="Remove these files from the server">
-          {clearing ? 'Clearing…' : '⌫ Clear'}
+          {clearing ? <><i className="fa-solid fa-circle-notch fa-spin" /> Clearing…</> : <><i className="fa-solid fa-trash-can" /> Clear</>}
         </button>
       </div>
       {jobs.map((j) => (

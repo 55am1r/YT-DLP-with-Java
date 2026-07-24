@@ -42,6 +42,50 @@ export function fmtCountdown(msLeft) {
   return h ? `${h}:${mm}:${ss}` : `${m}:${ss}`
 }
 
+/** Seconds → "1:05" / "1:02:03", used for slider labels. */
+export function secondsToClock(sec) {
+  const t = Math.max(0, Math.round(sec || 0))
+  const h = Math.floor(t / 3600)
+  const m = Math.floor((t % 3600) / 60)
+  const s = t % 60
+  const ss = String(s).padStart(2, '0')
+  return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`
+}
+
+/** Accepts 90, "90", "1m30s", "1h2m3s", "1:30", "01:02:03". */
+export function parseTimeToSeconds(raw) {
+  if (raw == null) return null
+  const s = String(raw).trim()
+  if (!s) return null
+  if (/^\d+$/.test(s)) return parseInt(s, 10)
+  if (s.includes(':')) {
+    const parts = s.split(':').map((n) => parseInt(n, 10) || 0).reverse()
+    return (parts[0] || 0) + (parts[1] || 0) * 60 + (parts[2] || 0) * 3600
+  }
+  const m = s.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i)
+  if (m && (m[1] || m[2] || m[3])) {
+    return (+(m[1] || 0)) * 3600 + (+(m[2] || 0)) * 60 + (+(m[3] || 0))
+  }
+  return null
+}
+
+/**
+ * Pull a start time out of a pasted link — YouTube uses ?t=90, &start=90 or #t=1m30s.
+ * Returns seconds, or null when the link carries no timestamp.
+ */
+export function parseUrlTimestamp(url) {
+  try {
+    const u = new URL(url)
+    const raw =
+      u.searchParams.get('t') ||
+      u.searchParams.get('start') ||
+      (u.hash.match(/t=([^&]+)/) || [])[1]
+    return raw ? parseTimeToSeconds(raw) : null
+  } catch {
+    return null
+  }
+}
+
 /** "1080p · MP4" for a finished job. */
 export function fmtKind(job) {
   const parts = []

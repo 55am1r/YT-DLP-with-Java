@@ -176,7 +176,12 @@ public class YtDlpService {
             if (thumb == null && id != null) {
                 thumb = "https://i.ytimg.com/vi/" + id + "/mqdefault.jpg";
             }
-            out.add(new PlaylistItem(idx, (title == null || title.isBlank()) ? "Item " + idx : title, dur, thumb));
+            String entryUrl = firstText(e, "url", "webpage_url");
+            if ((entryUrl == null || !entryUrl.startsWith("http")) && id != null) {
+                entryUrl = "https://www.youtube.com/watch?v=" + id;
+            }
+            out.add(new PlaylistItem(idx, (title == null || title.isBlank()) ? "Item " + idx : title,
+                    dur, thumb, entryUrl));
             idx++;
         }
         return out;
