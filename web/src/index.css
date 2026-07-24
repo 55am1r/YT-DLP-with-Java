@@ -208,27 +208,34 @@ body {
 /* Single video: hero takes the video's own aspect ratio (set inline from the
    analysis), so vertical clips stay vertical. Anything the frame doesn't cover
    is filled by a blurred copy of the same thumbnail rather than a hard crop. */
-/* A fixed-height band, not an aspect-ratio box: on a wide container a 16:9 hero grew
-   to ~700px tall and pushed every control below the fold. The image inside still
-   carries the video's true shape — it is centred in the band with the blurred fill
-   behind it, so vertical clips stay vertical and nothing gets stretched. */
+/* The box takes the video's own aspect ratio (set inline from the analysis), so the
+   frame is the right shape at every width and the whole image is visible — a fixed
+   height band cropped a 16:9 thumbnail into a portrait-shaped box on a phone.
+   max-height is the only limit: it stops a tall video from pushing the controls off
+   screen, and when it bites, `contain` letterboxes against the blurred fill rather
+   than cutting anything off. */
 .hero-wrap {
-  --hero-h: clamp(220px, 40vh, 430px);
-  position: relative; width: 100%; height: var(--hero-h); border-radius: 14px;
+  --ar: 1.7778;               /* replaced inline once the real ratio is known */
+  --cap: min(56vh, 440px);    /* how tall the frame may ever get */
+  position: relative;
+  /* Cap the WIDTH by the height limit rather than setting max-height. A max-height
+     fights aspect-ratio: the box clamps but the image keeps its aspect-derived
+     height, and overflow:hidden then quietly crops it — which is what was trimming
+     the top and bottom on desktop. Deriving width from the cap means height can
+     never exceed it, so the frame always matches the video exactly. */
+  width: min(100%, calc(var(--cap) * var(--ar)));
+  aspect-ratio: var(--ar);
+  margin-inline: auto;
+  border-radius: 14px;
   overflow: hidden; background: var(--bg-2); display: grid; place-items: center;
 }
-.hero-wrap.portrait { --hero-h: min(58vh, 460px); }
+.hero-wrap.portrait { --cap: min(64vh, 520px); }
 .hero-bg {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
   filter: blur(26px) saturate(150%); transform: scale(1.2); opacity: 0.45;
 }
-/* Landscape fills the band edge to edge, trimming a little top and bottom — a wide
-   video centred at its own ratio would leave big blurred pillars either side. */
-.hero-img { position: relative; display: block; width: 100%; height: 100%; object-fit: cover; }
-/* Portrait genuinely needs the fill: sized off the band height (a percentage height
-   doesn't resolve against the grid area and stretched the frame to full width), and
-   cover crops away the padding YouTube bakes into vertical thumbnails. */
-.hero-wrap.portrait .hero-img { height: var(--hero-h); width: auto; max-width: 100%; }
+/* contain, never cover — nothing is cropped at any screen size. */
+.hero-img { position: relative; display: block; width: 100%; height: 100%; object-fit: contain; }
 .hero-dim {
   position: absolute; right: 10px; bottom: 10px; padding: 3px 8px; border-radius: 999px;
   font-size: 11px; font-weight: 600; letter-spacing: 0.3px;
