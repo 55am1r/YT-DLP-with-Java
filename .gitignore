@@ -15,3 +15,13 @@ server/src/main/resources/static/
 # Local secrets / machine-specific config — copy application.properties.example
 # to application.properties and set your own password. Never commit real secrets.
 server/src/main/resources/application.properties
+
+# Obsidian vault living inside this repo — notes + the Local REST API key.
+# Never push these to the public repo.
+Ez-Tube/
+
+# Obsidian vault config at the repo root
+.obsidian/
+
+# Compiled Java artifacts
+*.class
