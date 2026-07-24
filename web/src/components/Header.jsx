@@ -41,15 +41,8 @@ export default function Header({ theme, onToggleTheme, onLogout }) {
         </div>
       </div>
 
+      {/* Fixed order at every screen size: update check, theme, log out. */}
       <div className="header-actions">
-        <button
-          className="icon-btn glass"
-          onClick={onToggleTheme}
-          title={theme === 'light' ? 'Switch to night mode' : 'Switch to day mode'}
-          aria-label="Toggle theme"
-        >
-          <i className={theme === 'light' ? 'fa-solid fa-moon' : 'fa-solid fa-sun'} />
-        </button>
         <button
           className={`badge glass ${cls}`}
           onClick={refresh}
@@ -58,6 +51,14 @@ export default function Header({ theme, onToggleTheme, onLogout }) {
         >
           <span className="dot" />
           {checking ? 'Checking…' : ver ? `yt-dlp ${ver}` : 'yt-dlp'}
+        </button>
+        <button
+          className="icon-btn glass"
+          onClick={onToggleTheme}
+          title={theme === 'light' ? 'Switch to night mode' : 'Switch to day mode'}
+          aria-label="Toggle theme"
+        >
+          <i className={theme === 'light' ? 'fa-solid fa-moon' : 'fa-solid fa-sun'} />
         </button>
         <button className="icon-btn glass" onClick={onLogout} title="Log out" aria-label="Log out">
           <i className="fa-solid fa-power-off" />
