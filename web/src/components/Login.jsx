@@ -24,7 +24,7 @@ export default function Login({ onSuccess }) {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={submit}>
-        <div className="login-logo" aria-hidden="true">▼</div>
+        <div className="login-logo" aria-hidden="true"><i className="fa-solid fa-circle-down" /></div>
         <h1>EZ-Tube</h1>
         <p className="muted">Enter the team login to continue</p>
         <input

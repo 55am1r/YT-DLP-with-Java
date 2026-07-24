@@ -1,20 +1,30 @@
 import { useState } from 'react'
-import { fmtDuration, fmtSize } from '../utils'
+import TrimSlider from './TrimSlider'
+import { fmtDuration, fmtSize, parseUrlTimestamp } from '../utils'
 
 const AUDIO_FORMATS = ['mp3', 'm4a', 'opus', 'wav']
 const CONTAINERS = ['mp4', 'mkv', 'webm']
 
 /** Single video: 21:9 hero, then title/length, then the download options. */
 export default function MediaPanel({ analysis, onStart }) {
-  const audioOnly = analysis.music // music sources never show video options
+  const audioOnly = analysis.music
+  const duration = Math.round(analysis.durationSeconds || 0)
+
+  // A pasted link may already carry a start time (?t=90). If so, open the trim
+  // controls pre-set to it instead of making the user re-enter anything.
+  const linkStart = parseUrlTimestamp(analysis.url)
+  const hasLinkStart = linkStart != null && duration > 0 && linkStart < duration
+
   const [mode, setMode] = useState(audioOnly ? 'audio' : 'video')
   const [height, setHeight] = useState(analysis.videoFormats?.[0]?.height ?? 1080)
   const [container, setContainer] = useState('mp4')
   const [audioFormat, setAudioFormat] = useState('mp3')
-  const [start, setStart] = useState('')
-  const [end, setEnd] = useState('')
+  const [trimOn, setTrimOn] = useState(hasLinkStart)
+  const [range, setRange] = useState(() => [hasLinkStart ? linkStart : 0, duration || 1])
 
   const isAudio = audioOnly || mode === 'audio'
+  const [start, end] = range
+  const wholeThing = start <= 0 && end >= duration
 
   function submit() {
     onStart({
@@ -25,19 +35,17 @@ export default function MediaPanel({ analysis, onStart }) {
       audioFormat: isAudio ? audioFormat : null,
       playlist: false,
       title: analysis.title,
-      startTime: start.trim() || null,
-      endTime: end.trim() || null,
+      startTime: trimOn && !wholeThing ? String(start) : null,
+      endTime: trimOn && !wholeThing ? String(end) : null,
     })
   }
-
-  const trimmed = start.trim() || end.trim()
 
   return (
     <section className="panel glass">
       {analysis.thumbnail ? (
         <img className="hero" src={analysis.thumbnail} alt="" />
       ) : (
-        <div className="hero hero-empty">♪</div>
+        <div className="hero hero-empty"><i className="fa-solid fa-music" /></div>
       )}
 
       <div className="media-head">
@@ -51,8 +59,12 @@ export default function MediaPanel({ analysis, onStart }) {
 
       {!audioOnly && (
         <div className="seg glass">
-          <button className={`seg-btn ${mode === 'video' ? 'active' : ''}`} onClick={() => setMode('video')}>🎬 Video</button>
-          <button className={`seg-btn ${mode === 'audio' ? 'active' : ''}`} onClick={() => setMode('audio')}>♪ Audio</button>
+          <button className={`seg-btn ${mode === 'video' ? 'active' : ''}`} onClick={() => setMode('video')}>
+            <i className="fa-solid fa-film" /> Video
+          </button>
+          <button className={`seg-btn ${mode === 'audio' ? 'active' : ''}`} onClick={() => setMode('audio')}>
+            <i className="fa-solid fa-music" /> Audio
+          </button>
         </div>
       )}
 
@@ -94,18 +106,47 @@ export default function MediaPanel({ analysis, onStart }) {
         </>
       )}
 
-      <div className="field">
-        <label>Trim (optional) — leave empty for the whole {isAudio ? 'track' : 'video'}</label>
-        <div className="clip-row">
-          <input className="clip-input" placeholder="start 0:30" value={start} onChange={(e) => setStart(e.target.value)} />
-          <span className="muted">→</span>
-          <input className="clip-input" placeholder="end 1:45" value={end} onChange={(e) => setEnd(e.target.value)} />
+      {duration > 0 && (
+        <div className="field">
+          {!trimOn ? (
+            <button
+              className="btn btn-sm"
+              onClick={() => {
+                setRange([hasLinkStart ? linkStart : 0, duration])
+                setTrimOn(true)
+              }}
+            >
+              <i className="fa-solid fa-scissors" /> Trim this {isAudio ? 'track' : 'video'}
+            </button>
+          ) : (
+            <>
+              <label>
+                <i className="fa-solid fa-scissors" /> Trim
+                {hasLinkStart && <span className="trim-hint"> · start taken from your link</span>}
+              </label>
+              <TrimSlider
+                duration={duration}
+                start={start}
+                end={end}
+                onChange={(s, e) => setRange([s, e])}
+              />
+              <div className="trim-actions">
+                <button className="btn btn-sm" onClick={() => setRange([0, duration])}>
+                  <i className="fa-solid fa-arrows-left-right-to-line" /> Whole {isAudio ? 'track' : 'video'}
+                </button>
+                <button className="btn btn-sm btn-ghost danger" onClick={() => { setTrimOn(false); setRange([0, duration]) }}>
+                  <i className="fa-solid fa-rotate-left" /> Cancel trim
+                </button>
+              </div>
+            </>
+          )}
         </div>
-      </div>
+      )}
 
       <button className="btn btn-primary btn-lg" onClick={submit}>
+        <i className="fa-solid fa-download" />
         Download {isAudio ? audioFormat.toUpperCase() : `${height}p · ${container.toUpperCase()}`}
-        {trimmed ? ' (clip)' : ''}
+        {trimOn && !wholeThing ? ' (clip)' : ''}
       </button>
     </section>
   )

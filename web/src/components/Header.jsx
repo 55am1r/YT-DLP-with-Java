@@ -34,7 +34,7 @@ export default function Header({ theme, onToggleTheme, onLogout }) {
   return (
     <header className="header">
       <div className="brand">
-        <div className="logo" aria-hidden="true">▼</div>
+        <div className="logo" aria-hidden="true"><i className="fa-solid fa-circle-down" /></div>
         <div>
           <h1>EZ-Tube</h1>
           <p className="muted">Download audio &amp; video from YouTube — for the team</p>
@@ -48,7 +48,7 @@ export default function Header({ theme, onToggleTheme, onLogout }) {
           title={theme === 'light' ? 'Switch to night mode' : 'Switch to day mode'}
           aria-label="Toggle theme"
         >
-          {theme === 'light' ? '☾' : '☀'}
+          <i className={theme === 'light' ? 'fa-solid fa-moon' : 'fa-solid fa-sun'} />
         </button>
         <button
           className={`badge glass ${cls}`}
@@ -59,7 +59,9 @@ export default function Header({ theme, onToggleTheme, onLogout }) {
           <span className="dot" />
           {checking ? 'Checking…' : ver ? `yt-dlp ${ver}` : 'yt-dlp'}
         </button>
-        <button className="icon-btn glass" onClick={onLogout} title="Log out" aria-label="Log out">⏻</button>
+        <button className="icon-btn glass" onClick={onLogout} title="Log out" aria-label="Log out">
+          <i className="fa-solid fa-power-off" />
+        </button>
       </div>
     </header>
   )

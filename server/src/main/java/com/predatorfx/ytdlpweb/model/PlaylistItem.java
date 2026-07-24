@@ -8,6 +8,8 @@ package com.predatorfx.ytdlpweb.model;
  * @param title           entry title
  * @param durationSeconds length, may be null for unavailable entries
  * @param thumbnail       image URL
+ * @param url             the entry's own watch URL, so the UI can probe its formats and
+ *                        queue it as its own job with its own quality/container
  */
-public record PlaylistItem(int index, String title, Long durationSeconds, String thumbnail) {
+public record PlaylistItem(int index, String title, Long durationSeconds, String thumbnail, String url) {
 }
