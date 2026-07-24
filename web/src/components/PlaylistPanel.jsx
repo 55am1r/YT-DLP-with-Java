@@ -135,7 +135,15 @@ export default function PlaylistPanel({ analysis, onStart, codecs }) {
   return (
     <section className="panel glass">
       <div className="pl-header">
-        {analysis.thumbnail && <img className="pl-thumb" src={analysis.thumbnail} alt="" />}
+        {analysis.thumbnail && (
+          <img
+            className="pl-thumb"
+            src={analysis.thumbnail}
+            srcSet={analysis.thumbnailSrcset || undefined}
+            sizes="(max-width: 640px) 104px, 168px"
+            alt=""
+          />
+        )}
         <div style={{ minWidth: 0 }}>
           <h2 className="title">{analysis.title || 'Playlist'}</h2>
           <p className="muted">
@@ -232,7 +240,18 @@ export default function PlaylistPanel({ analysis, onStart, codecs }) {
                     onChange={() => toggle(it)}
                     aria-label={`Select ${it.title}`}
                   />
-                  {it.thumbnail && <img className="pl-thumb" src={it.thumbnail} alt="" loading="lazy" />}
+                  {it.thumbnail && (
+                    <img
+                      className="pl-thumb"
+                      src={it.thumbnail}
+                      srcSet={it.thumbnailSrcset || undefined}
+                      /* Full row width on a phone, a fixed slot on desktop. */
+                      sizes="(max-width: 640px) calc(100vw - 96px), 168px"
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  )}
                   <div className="pl-meta">
                     <p className="pl-title">{it.index}. {it.title}</p>
                     <span className="muted small">{it.durationSeconds != null ? fmtDuration(it.durationSeconds) : '—'}</span>

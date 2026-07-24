@@ -25,5 +25,7 @@ public record AnalyzeResult(
         List<VideoFormatOption> videoFormats,
         List<PlaylistItem> items,
         Integer videoWidth,
-        Integer videoHeight) {
+        Integer videoHeight,
+        /** Candidate thumbnail sizes as an HTML srcset, so small screens fetch small images. */
+        String thumbnailSrcset) {
 }

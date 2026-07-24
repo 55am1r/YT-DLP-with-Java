@@ -147,7 +147,8 @@ public class YtDlpService {
             formats = standardTiers();
         }
         return new AnalyzeResult(url, playlist, title, uploader, duration, thumb, music, count, formats, items,
-                dim[0] > 0 ? dim[0] : null, dim[1] > 0 ? dim[1] : null);
+                dim[0] > 0 ? dim[0] : null, dim[1] > 0 ? dim[1] : null,
+                thumbnailSrcset(root, ratio));
     }
 
     /** Formats for one video URL — used when probing playlist items one by one. */
@@ -285,8 +286,12 @@ public class YtDlpService {
             if ((entryUrl == null || !entryUrl.startsWith("http")) && id != null) {
                 entryUrl = "https://www.youtube.com/watch?v=" + id;
             }
+            String srcset = thumbnailSrcset(e, 16.0 / 9.0);
+            if (srcset == null && id != null) {
+                srcset = youtubeSrcset(id);
+            }
             out.add(new PlaylistItem(idx, (title == null || title.isBlank()) ? "Item " + idx : title,
-                    dur, thumb, entryUrl));
+                    dur, thumb, entryUrl, srcset));
             idx++;
         }
         return out;
@@ -910,6 +915,50 @@ public class YtDlpService {
             return t;
         }
         return (th.isArray() && !th.isEmpty()) ? text(th.get(th.size() - 1), "url") : null;
+    }
+
+    /**
+     * Every thumbnail that matches the video's shape, as an HTML srcset string.
+     *
+     * Without this the browser was handed one large image and scaled it down in the
+     * layout — a phone downloaded a 1280px file to draw it 350px wide, paying the
+     * bandwidth and decode cost for detail it then threw away. Handing over the real
+     * candidates lets it pick the one that fits the slot.
+     */
+    private static String thumbnailSrcset(JsonNode root, double targetRatio) {
+        JsonNode th = root.path("thumbnails");
+        if (!th.isArray()) {
+            return null;
+        }
+        TreeMap<Integer, String> byWidth = new TreeMap<>();
+        for (JsonNode t : th) {
+            String url = text(t, "url");
+            int w = t.path("width").asInt(0);
+            int h = t.path("height").asInt(0);
+            // A comma inside a URL would be read as a srcset separator and break the list.
+            if (url == null || w <= 0 || h <= 0 || url.indexOf(',') >= 0) {
+                continue;
+            }
+            if (Math.abs((double) w / h - targetRatio) > 0.25) {
+                continue; // different crop — mixing shapes would make the slot jump
+            }
+            byWidth.putIfAbsent(w, url);
+        }
+        if (byWidth.size() < 2) {
+            return null; // nothing to choose between
+        }
+        return byWidth.entrySet().stream()
+                .map(e -> e.getValue() + " " + e.getKey() + "w")
+                .collect(Collectors.joining(", "));
+    }
+
+    /**
+     * Playlist entries come back flat, usually without a thumbnail list. YouTube always
+     * serves these fixed sizes per video id, so the set can be named directly.
+     */
+    private static String youtubeSrcset(String id) {
+        String base = "https://i.ytimg.com/vi/" + id + "/";
+        return base + "default.jpg 120w, " + base + "mqdefault.jpg 320w, " + base + "hqdefault.jpg 480w";
     }
 
     /** Native video dimensions, taken from the highest-resolution video stream. */

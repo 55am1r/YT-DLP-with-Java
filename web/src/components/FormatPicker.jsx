@@ -104,9 +104,9 @@ export default function FormatPicker({ value, codecs, onChange, compact = false 
                     {c.label}
                     {c.badge && <Badge text={c.badge} />}
                   </span>
-                  <span className="pill-sub">
-                    {c.sizeHint}{c.hardware ? ' · hardware accelerated' : ''}
-                  </span>
+                  {/* Just the figure — the full trade-off is spelled out in the hint
+                      below, so the chip stays one short line. */}
+                  <span className="pill-sub">{c.sizeHint}</span>
                 </button>
               ))}
             </div>
@@ -115,8 +115,7 @@ export default function FormatPicker({ value, codecs, onChange, compact = false 
             <p className="hint-line">
               {codec === 'none'
                 ? 'Best possible quality and the quickest to finish — it just takes the most space.'
-                : `Saves space (${chosen?.sizeHint}) for a small drop in quality, and adds encoding time`
-                  + ` after the download${chosen?.hardware ? ' — kept short by the Mac\'s media engine' : ''}.`}
+                : `${chosen?.note}. Expect ${chosen?.sizeHint} of the original size, encoded after the download.`}
             </p>
           </div>
         </>

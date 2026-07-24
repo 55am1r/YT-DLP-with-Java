@@ -260,14 +260,10 @@ body {
    screen got. An auto-fit grid gives every option the same width and fills the row
    completely, so the choices stay evenly spread at any size and reflow to fewer
    columns on a phone instead of shrinking. */
+/* Each option is exactly as wide as its own label. Growing them to justify the row
+   made a lone left-over option span the full width, which looked broken next to the
+   normal-sized ones — better a clean ragged edge than a stretched button. */
 .pills { display: flex; flex-wrap: wrap; gap: 9px; }
-/* flex-grow rather than a fixed grid: a grid leaves empty cells whenever the count
-   doesn't divide evenly (four codecs in three columns left one stranded on its own
-   row). Growing means the last row always stretches to the full width, so there is
-   no dead space at any screen size. */
-.pills > * { flex: 1 1 118px; }
-/* Compression options carry a label, a badge and a sub-line, so they start wider. */
-.pills-wide > * { flex: 1 1 172px; }
 .pill {
   border: 1px solid var(--border-soft); background: var(--glass-bg); color: var(--text);
   padding: 10px 14px; border-radius: 10px; font-size: 13.5px; cursor: pointer;
@@ -369,8 +365,10 @@ body {
   margin: 8px 0 0;
 }
 .hint-line i { color: var(--accent-2); }
-.codec-pill { flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px; text-align: left; padding: 11px 13px; }
-.codec-main { display: inline-flex; align-items: center; gap: 8px; }
+/* One line: name, badge, then the size figure. Stacking them made every card a
+   different height with the text wrapping mid-word — a mess to read across. */
+.codec-pill { flex-direction: row; align-items: center; gap: 9px; white-space: nowrap; }
+.codec-main { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 .codec-badge {
   display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px;
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;
@@ -504,7 +502,6 @@ body {
 /* Tablets and small laptops: the playlist row's controls need the whole width. */
 @media (max-width: 820px) {
   .pl-thumb { width: 148px; }
-  .pills-wide > * { flex: 1 1 176px; }
 }
 
 @media (max-width: 640px) {
@@ -533,9 +530,10 @@ body {
   .pl-header { gap: 12px; }
   .pl-header .pl-thumb { width: 104px; }
 
-  /* Two roomy options per row beat four cramped ones; compression cards go single. */
-  .pills > * { flex: 1 1 104px; }
-  .pills-wide > * { flex: 1 1 100%; }
+  /* The size figure is the first thing to go on a phone — with the badge alongside,
+     a nowrap line like "H.265 / HEVC · RECOMMENDED · 65–90%" runs past the edge and
+     gets clipped. The hint line underneath still states the figure in full. */
+  .codec-pill .pill-sub { display: none; }
 
   .seg { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
   .seg-btn { padding: 10px 8px; }
@@ -550,10 +548,6 @@ body {
   .trim-actions .btn { flex: 1; }
 }
 
-/* Very narrow phones — one option per row so nothing is clipped mid-word. */
-@media (max-width: 380px) {
-  .pills > * { flex: 1 1 44%; }
-}
 
 /* ---------- Liquid glass surface ----------
    The buttons read as flat panels with a lit top edge. Real glass also shows a
