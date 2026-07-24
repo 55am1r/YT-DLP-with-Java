@@ -54,12 +54,35 @@ export async function analyze(url) {
   return res.json()
 }
 
-export async function startJob(request) {
-  const res = await fetch('/api/jobs', {
+/**
+ * Queue a download. The server answers 409 when an identical file is already
+ * downloading or finished; that comes back as {duplicate, job} so the caller can ask
+ * the user before spending the bandwidth and disk a second time.
+ */
+export async function startJob(request, force = false) {
+  const res = await fetch('/api/jobs' + (force ? '?force=true' : ''), {
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify(request),
   })
+  if (res.status === 409) {
+    const body = await res.json()
+    return { duplicate: true, job: body.job }
+  }
+  if (!res.ok) throw await toError(res)
+  return res.json()
+}
+
+/** Compression options this server's ffmpeg can actually produce. */
+export async function getCodecs() {
+  const res = await fetch('/api/codecs')
+  if (!res.ok) throw await toError(res)
+  return res.json()
+}
+
+/** Whether every video in a playlist shares the same resolutions (gates the zip option). */
+export async function getPlaylistFormats(url) {
+  const res = await fetch(`/api/playlist/formats?url=${encodeURIComponent(url)}`)
   if (!res.ok) throw await toError(res)
   return res.json()
 }

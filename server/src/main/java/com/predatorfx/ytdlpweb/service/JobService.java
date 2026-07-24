@@ -94,6 +94,25 @@ public class JobService {
         return jobs.get(id);
     }
 
+    /**
+     * An existing job that would produce exactly the same file as {@code req}.
+     *
+     * Teammates routinely paste the same link, so without this the Mac downloads and
+     * stores the same 4K video several times over. Failed and canceled jobs don't count
+     * (retrying those is the point), and neither do completed ones whose file the TTL
+     * sweep has already deleted.
+     */
+    public Job findDuplicate(DownloadRequest req) {
+        String sig = req.signature();
+        return jobs.values().stream()
+                .filter(j -> j.getRequest() != null && sig.equals(j.getRequest().signature()))
+                .filter(j -> j.getStatus() != JobStatus.FAILED && j.getStatus() != JobStatus.CANCELED)
+                .filter(j -> j.getStatus() != JobStatus.COMPLETED
+                        || (j.getFilePath() != null && Files.exists(j.getFilePath())))
+                .max(Comparator.comparingLong(Job::getCreatedAt))
+                .orElse(null);
+    }
+
     public List<Job> all() {
         return jobs.values().stream()
                 .sorted(Comparator.comparingLong(Job::getCreatedAt).reversed())

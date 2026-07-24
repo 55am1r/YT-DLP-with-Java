@@ -1,41 +1,74 @@
-import { useState } from 'react'
-import { analyze } from '../api'
+import { useEffect, useState } from 'react'
+import { analyze, getPlaylistFormats } from '../api'
+import FormatPicker, { defaultFormat } from './FormatPicker'
 import { fmtDuration } from '../utils'
 
 const AUDIO_FORMATS = ['mp3', 'm4a', 'opus', 'wav']
-const CONTAINERS = ['mp4', 'mkv', 'webm']
 
 /**
  * Playlist view with two modes:
- *  - "Download all" → one zip job using the shared settings shown up top.
- *  - Multi-select   → the shared settings disappear and every ticked item carries its
- *                     OWN video/audio choice, quality and container, queueing as its
- *                     own job. One playlist can yield some MP4s and some MP3s.
- * Selections and per-item settings persist when toggling modes — hidden, not lost.
+ *  - "Download all" → one zip job. Offered ONLY when every item exposes the same
+ *    resolutions, and then only at those shared resolutions; one quality setting across
+ *    items that don't share it would silently hand people different files.
+ *  - Multi-select   → each ticked item carries its own type, format and quality.
  */
-export default function PlaylistPanel({ analysis, onStart }) {
+export default function PlaylistPanel({ analysis, onStart, codecs }) {
   const audioOnly = analysis.music
   const [mode, setMode] = useState(audioOnly ? 'audio' : 'video')
-  const [height, setHeight] = useState(analysis.videoFormats?.[0]?.height ?? 1080)
-  const [container, setContainer] = useState('mp4')
+  const [height, setHeight] = useState(null)
+  const [format, setFormat] = useState(defaultFormat)
   const [audioFormat, setAudioFormat] = useState('mp3')
   const [all, setAll] = useState(true)
   const [selected, setSelected] = useState(() => new Set())
   const [probes, setProbes] = useState({})
   const [perItem, setPerItem] = useState({})
 
+  // Can this playlist honestly be zipped at one setting? The server reads every item to
+  // find out, so the verdict arrives after the page does.
+  const [uniformity, setUniformity] = useState({ loading: true })
+
   const items = analysis.items || []
   const count = analysis.playlistCount || items.length
   const chosen = [...selected].sort((a, b) => a - b)
   const sharedAudio = audioOnly || mode === 'audio'
-  const sharedLabel = sharedAudio ? audioFormat.toUpperCase() : `${height}p · ${container.toUpperCase()}`
+  const zipOk = uniformity.uniform === true
+  const zipMode = all && zipOk
 
-  const defaults = () => ({ kind: audioOnly ? 'audio' : mode, height, container, audioFormat })
+  useEffect(() => {
+    let dead = false
+    setUniformity({ loading: true })
+    getPlaylistFormats(analysis.url)
+      .then((r) => {
+        if (dead) return
+        setUniformity({ loading: false, ...r })
+        if (!r.uniform) setAll(false) // no honest single zip — go straight to per-item
+        else if (r.common?.length) setHeight((h) => h ?? r.common[0].height)
+      })
+      .catch((e) => {
+        if (dead) return
+        setUniformity({ loading: false, uniform: false, reason: e.message || 'Could not read this playlist' })
+        setAll(false)
+      })
+    return () => { dead = true }
+  }, [analysis.url])
+
+  const commonFormats = uniformity.common || []
+  const sharedLabel = sharedAudio
+    ? audioFormat.toUpperCase()
+    : `${height ?? '—'}p · ${format.container.toUpperCase()}`
+
+  const defaults = () => ({
+    kind: audioOnly ? 'audio' : mode,
+    height: null,
+    audioFormat,
+    format: defaultFormat(),
+  })
   const cfgOf = (index) => perItem[index] || defaults()
 
-  /** Probe an entry so we can offer the resolutions it actually has. */
-  async function probe(item) {
-    if (probes[item.index]?.formats || probes[item.index]?.loading || !item.url) return
+  /** Probe one entry so we can offer the resolutions it actually has. */
+  async function probe(item, force = false) {
+    if (!item.url) return
+    if (!force && (probes[item.index]?.formats || probes[item.index]?.loading)) return
     setProbes((p) => ({ ...p, [item.index]: { loading: true } }))
     try {
       const info = await analyze(item.url)
@@ -44,7 +77,7 @@ export default function PlaylistPanel({ analysis, onStart }) {
       setPerItem((p) => {
         const cur = p[item.index] || defaults()
         const stillValid = formats.some((f) => f.height === cur.height)
-        return { ...p, [item.index]: { ...cur, height: stillValid ? cur.height : (formats[0]?.height ?? cur.height) } }
+        return { ...p, [item.index]: { ...cur, height: stillValid ? cur.height : (formats[0]?.height ?? null) } }
       })
     } catch (e) {
       setProbes((p) => ({ ...p, [item.index]: { loading: false, error: e.message || 'Could not read formats' } }))
@@ -68,12 +101,13 @@ export default function PlaylistPanel({ analysis, onStart }) {
   }
 
   function submit() {
-    if (all) {
+    if (zipMode) {
       onStart({
         url: analysis.url,
         kind: sharedAudio ? 'audio' : 'video',
         height: sharedAudio ? null : height,
-        container: sharedAudio ? null : container,
+        container: sharedAudio ? null : format.container,
+        codec: sharedAudio ? null : format.codec,
         audioFormat: sharedAudio ? audioFormat : null,
         playlist: true,
         title: analysis.title,
@@ -89,7 +123,8 @@ export default function PlaylistPanel({ analysis, onStart }) {
         url: item.url,
         kind: itemAudio ? 'audio' : 'video',
         height: itemAudio ? null : cfg.height,
-        container: itemAudio ? null : cfg.container,
+        container: itemAudio ? null : cfg.format.container,
+        codec: itemAudio ? null : cfg.format.codec,
         audioFormat: itemAudio ? cfg.audioFormat : null,
         playlist: false,
         title: item.title,
@@ -110,9 +145,9 @@ export default function PlaylistPanel({ analysis, onStart }) {
         </div>
       </div>
 
-      {/* Shared settings exist only in "download all" mode — in multi-select each item
-          carries its own type, quality and container. */}
-      {all && (
+      {/* Shared settings exist only in zip mode — in multi-select each item carries its
+          own type, format and quality. */}
+      {zipMode && (
         <>
           {!audioOnly && (
             <div className="seg glass">
@@ -138,22 +173,18 @@ export default function PlaylistPanel({ analysis, onStart }) {
             </div>
           ) : (
             <>
+              <FormatPicker value={format} codecs={codecs} onChange={setFormat} />
               <div className="field">
-                <label>Quality — applies to every item</label>
+                <label>Quality — every video in this playlist offers these</label>
                 <div className="pills">
-                  {analysis.videoFormats.map((f) => (
-                    <button key={f.height} className={`pill ${height === f.height ? 'active' : ''}`} onClick={() => setHeight(f.height)}>
+                  {commonFormats.map((f) => (
+                    <button
+                      key={f.height}
+                      className={`pill ${height === f.height ? 'active' : ''}`}
+                      onClick={() => setHeight(f.height)}
+                    >
                       {f.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="field">
-                <label>Container</label>
-                <div className="pills">
-                  {CONTAINERS.map((c) => (
-                    <button key={c} className={`pill ${container === c ? 'active' : ''}`} onClick={() => setContainer(c)}>
-                      {c.toUpperCase()}
+                      {f.note ? ` · ${f.note}` : ''}
                     </button>
                   ))}
                 </div>
@@ -163,12 +194,23 @@ export default function PlaylistPanel({ analysis, onStart }) {
         </>
       )}
 
-      <label className="checkbox">
-        <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
-        <span>Download all {count} {count === 1 ? 'item' : 'items'} as a .zip</span>
-      </label>
+      {uniformity.loading ? (
+        <p className="pl-selnote">
+          <i className="fa-solid fa-circle-notch fa-spin" /> Checking whether all {count} videos offer the same
+          resolutions…
+        </p>
+      ) : zipOk ? (
+        <label className="checkbox">
+          <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
+          <span>Download all {count} {count === 1 ? 'item' : 'items'} as a .zip</span>
+        </label>
+      ) : (
+        <p className="pl-warn">
+          <i className="fa-solid fa-circle-info" /> {uniformity.reason}
+        </p>
+      )}
 
-      {!all && (
+      {!zipMode && (
         <>
           <p className="pl-selnote">
             {chosen.length > 0
@@ -205,22 +247,34 @@ export default function PlaylistPanel({ analysis, onStart }) {
 
                     {on && (
                       <>
-                        {!audioOnly && (
-                          <div className="pl-chips">
-                            <button
-                              className={`pill sm ${cfg.kind === 'video' ? 'active' : ''}`}
-                              onClick={() => setItemField(it.index, 'kind', 'video')}
-                            >
-                              <i className="fa-solid fa-film" /> Video
-                            </button>
-                            <button
-                              className={`pill sm ${cfg.kind === 'audio' ? 'active' : ''}`}
-                              onClick={() => setItemField(it.index, 'kind', 'audio')}
-                            >
-                              <i className="fa-solid fa-music" /> Audio
-                            </button>
-                          </div>
-                        )}
+                        <div className="pl-chips kind-row">
+                          {!audioOnly && (
+                            <>
+                              <button
+                                className={`pill sm ${cfg.kind === 'video' ? 'active' : ''}`}
+                                onClick={() => setItemField(it.index, 'kind', 'video')}
+                              >
+                                <i className="fa-solid fa-film" /> Video
+                              </button>
+                              <button
+                                className={`pill sm ${cfg.kind === 'audio' ? 'active' : ''}`}
+                                onClick={() => setItemField(it.index, 'kind', 'audio')}
+                              >
+                                <i className="fa-solid fa-music" /> Audio
+                              </button>
+                            </>
+                          )}
+                          {/* Re-reads just this video's options — the rest of the list stays put. */}
+                          <button
+                            className={`icon-round sm ${pr.loading ? 'spinning' : ''}`}
+                            onClick={() => probe(it, true)}
+                            disabled={pr.loading}
+                            title="Re-check this video's formats"
+                            aria-label={`Refresh formats for ${it.title}`}
+                          >
+                            <i className="fa-solid fa-rotate" />
+                          </button>
+                        </div>
 
                         {itemAudio ? (
                           <div className="pl-chips">
@@ -234,38 +288,38 @@ export default function PlaylistPanel({ analysis, onStart }) {
                               </button>
                             ))}
                           </div>
-                        ) : pr.loading ? (
-                          <div className="pl-chips muted small">
-                            <i className="fa-solid fa-circle-notch fa-spin" /> reading available qualities…
+                        ) : (
+                          <div className="pl-adv">
+                            <FormatPicker
+                              value={cfg.format}
+                              codecs={codecs}
+                              compact
+                              onChange={(f) => setItemField(it.index, 'format', f)}
+                            />
+                            {pr.loading ? (
+                              <div className="pl-chips muted small">
+                                <i className="fa-solid fa-circle-notch fa-spin" /> reading available qualities…
+                              </div>
+                            ) : pr.error ? (
+                              <div className="pl-chips small" style={{ color: 'var(--accent-2)' }}>{pr.error}</div>
+                            ) : pr.formats ? (
+                              <div className="field">
+                                <label>Quality</label>
+                                <div className="pills">
+                                  {pr.formats.map((f) => (
+                                    <button
+                                      key={f.height}
+                                      className={`pill sm ${cfg.height === f.height ? 'active' : ''}`}
+                                      onClick={() => setItemField(it.index, 'height', f.height)}
+                                    >
+                                      {f.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
-                        ) : pr.error ? (
-                          <div className="pl-chips small" style={{ color: 'var(--accent-2)' }}>{pr.error}</div>
-                        ) : pr.formats ? (
-                          <>
-                            <div className="pl-chips">
-                              {pr.formats.map((f) => (
-                                <button
-                                  key={f.height}
-                                  className={`pill sm ${cfg.height === f.height ? 'active' : ''}`}
-                                  onClick={() => setItemField(it.index, 'height', f.height)}
-                                >
-                                  {f.label}
-                                </button>
-                              ))}
-                            </div>
-                            <div className="pl-chips">
-                              {CONTAINERS.map((c) => (
-                                <button
-                                  key={c}
-                                  className={`pill sm ${cfg.container === c ? 'active' : ''}`}
-                                  onClick={() => setItemField(it.index, 'container', c)}
-                                >
-                                  {c.toUpperCase()}
-                                </button>
-                              ))}
-                            </div>
-                          </>
-                        ) : null}
+                        )}
                       </>
                     )}
                   </div>
@@ -277,9 +331,13 @@ export default function PlaylistPanel({ analysis, onStart }) {
         </>
       )}
 
-      <button className="btn btn-primary btn-lg" onClick={submit} disabled={!all && chosen.length === 0}>
+      <button
+        className="btn btn-primary btn-lg"
+        onClick={submit}
+        disabled={uniformity.loading || (!zipMode && chosen.length === 0) || (zipMode && !sharedAudio && !height)}
+      >
         <i className="fa-solid fa-download" />
-        {all ? `Download all ${count} · ${sharedLabel}` : `Download ${chosen.length || ''} selected`}
+        {zipMode ? `Download all ${count} · ${sharedLabel}` : `Download ${chosen.length || ''} selected`}
       </button>
     </section>
   )
