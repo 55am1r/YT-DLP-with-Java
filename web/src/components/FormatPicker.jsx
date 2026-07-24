@@ -40,6 +40,7 @@ export default function FormatPicker({ value, codecs, onChange, compact = false 
   // Not every codec fits every container — H.265 has no place in a WEBM file. Rather
   // than let the server reject it later, offer only what the chosen container holds.
   const usable = codecs.filter((c) => c.containers.includes(container))
+  const chosen = usable.find((c) => c.id === codec)
 
   useEffect(() => {
     if (mode === 'advanced' && codec !== 'none' && !usable.some((c) => c.id === codec)) {
@@ -109,10 +110,13 @@ export default function FormatPicker({ value, codecs, onChange, compact = false 
                 </button>
               ))}
             </div>
+            {/* Spell out the actual trade being made: picture quality, disk space, and
+                how long the job takes. */}
             <p className="hint-line">
               {codec === 'none'
-                ? 'Streams are copied as-is — fastest, and nothing is lost.'
-                : `Re-encoding takes extra time after the download — ${usable.find((c) => c.id === codec)?.note || ''}`}
+                ? 'Best possible quality and the quickest to finish — it just takes the most space.'
+                : `Saves space (${chosen?.sizeHint}) for a small drop in quality, and adds encoding time`
+                  + ` after the download${chosen?.hardware ? ' — kept short by the Mac\'s media engine' : ''}.`}
             </p>
           </div>
         </>

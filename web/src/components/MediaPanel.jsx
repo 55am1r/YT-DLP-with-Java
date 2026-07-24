@@ -61,10 +61,8 @@ export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refre
 
   return (
     <section className="panel glass">
-      <div
-        className={`hero-wrap ${portrait ? 'portrait' : ''}`}
-        style={ratio && !portrait ? { aspectRatio: String(ratio) } : undefined}
-      >
+      {/* The band's height is fixed in CSS; the image carries the video's real shape. */}
+      <div className={`hero-wrap ${portrait ? 'portrait' : ''}`}>
         {analysis.thumbnail ? (
           <>
             <img className="hero-bg" src={analysis.thumbnail} alt="" aria-hidden="true" />
@@ -72,7 +70,7 @@ export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refre
               className="hero-img"
               src={analysis.thumbnail}
               alt=""
-              style={portrait ? { aspectRatio: String(ratio) } : undefined}
+              style={portrait && ratio ? { aspectRatio: String(ratio) } : undefined}
             />
           </>
         ) : (
