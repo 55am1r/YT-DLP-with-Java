@@ -186,7 +186,13 @@ export default function PlaylistPanel({ analysis, onStart }) {
                     <p className="pl-title">{it.index}. {it.title}</p>
                     <span className="muted small">{it.durationSeconds != null ? fmtDuration(it.durationSeconds) : '—'}</span>
 
-                    {!on && <div className="pl-chips"><span className="pill info">{sharedLabel}</span></div>}
+                    {!on && (
+                      <div className="pl-chips">
+                        <span className="pl-hint">
+                          <i className="fa-regular fa-circle-question" /> Select to see available resolutions
+                        </span>
+                      </div>
+                    )}
 
                     {on && isAudio && <div className="pl-chips"><span className="pill info">{audioFormat.toUpperCase()}</span></div>}
 
