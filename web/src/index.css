@@ -105,7 +105,9 @@ body {
 }
 .brand h1 { font-size: 20px; margin: 0; letter-spacing: 0.2px; }
 .brand p { margin: 2px 0 0; font-size: 12.5px; }
-.header-actions { display: flex; align-items: center; gap: 8px; }
+/* Update check, theme, log out — kept together at the right edge with a tight gap
+   rather than spread across the row. */
+.header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 
 .icon-btn {
   width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center;
@@ -512,11 +514,10 @@ body {
 @media (max-width: 750px) {
   .container { max-width: none; padding: 18px 12px 22px; }
 
-  /* Theme, update check and log out sat bunched at one end of the row. Spread the
-     gaps evenly across the full width instead — the buttons keep their own size,
-     only the space between them changes. */
+  /* Same grouping on a phone: the three sit together at the right edge, not spread
+     across the width. */
   .header { flex-direction: column; align-items: stretch; gap: 12px; }
-  .header-actions { width: 100%; justify-content: space-evenly; flex-wrap: nowrap; }
+  .header-actions { width: 100%; justify-content: flex-end; flex-wrap: nowrap; }
 }
 
 /* Tablets and small laptops: the playlist row's controls need the whole width. */
