@@ -1,5 +1,7 @@
 package com.predatorfx.ytdlpweb.model;
 
+import java.util.List;
+
 /**
  * A download request from the browser.
  *
@@ -9,6 +11,10 @@ package com.predatorfx.ytdlpweb.model;
  * @param container    "mp4", "mkv" or "webm" for video; ignored for audio
  * @param playlist     if true and the URL is a playlist, download every item
  * @param audioFormat  audio container for audio jobs, defaults to "mp3"
+ * @param title        media title from the analyze step, so the job card never shows "Preparing…"
+ * @param startTime    optional clip start, "HH:MM:SS" or seconds — trims the download
+ * @param endTime      optional clip end, "HH:MM:SS" or seconds
+ * @param items        optional 1-based playlist item numbers to download (multi-select)
  */
 public record DownloadRequest(
         String url,
@@ -16,7 +22,11 @@ public record DownloadRequest(
         Integer height,
         String container,
         boolean playlist,
-        String audioFormat) {
+        String audioFormat,
+        String title,
+        String startTime,
+        String endTime,
+        List<Integer> items) {
 
     public boolean isAudio() {
         return kind == null || kind.equalsIgnoreCase("audio");
@@ -32,5 +42,18 @@ public record DownloadRequest(
 
     public int heightOrDefault() {
         return (height == null || height <= 0) ? 1080 : height;
+    }
+
+    /** The container the finished file will actually use. */
+    public String targetExtension() {
+        return isAudio() ? audioFormatOrDefault() : containerOrDefault();
+    }
+
+    public boolean hasClipRange() {
+        return (startTime != null && !startTime.isBlank()) || (endTime != null && !endTime.isBlank());
+    }
+
+    public boolean hasItemSelection() {
+        return items != null && !items.isEmpty();
     }
 }
