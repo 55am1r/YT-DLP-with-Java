@@ -16,7 +16,19 @@ export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refre
   const ratio = analysis.videoWidth && analysis.videoHeight
     ? analysis.videoWidth / analysis.videoHeight
     : null
-  const portrait = ratio != null && ratio < 1
+
+  // The frame is shaped by the image that actually loaded, not by the video, because
+  // the two don't always agree: YouTube often serves a padded 4:3 thumbnail for a
+  // vertical Short. Matching the image means it fills its frame exactly — nothing
+  // cropped, nothing letterboxed — whatever size the browser picked from the srcset.
+  const [imgRatio, setImgRatio] = useState(null)
+  const frameRatio = imgRatio || ratio
+  const portrait = frameRatio != null && frameRatio < 1
+
+  function measure(e) {
+    const { naturalWidth: w, naturalHeight: h } = e.currentTarget
+    if (w > 0 && h > 0) setImgRatio(w / h)
+  }
 
   const [mode, setMode] = useState(audioOnly ? 'audio' : 'video')
   const [height, setHeight] = useState(analysis.videoFormats?.[0]?.height ?? 1080)
@@ -61,8 +73,12 @@ export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refre
 
   return (
     <section className="panel glass">
-      {/* The band's height is fixed in CSS; the image carries the video's real shape. */}
-      <div className={`hero-wrap ${portrait ? 'portrait' : ''}`}>
+      {/* The frame takes the video's own shape, so the whole thumbnail is visible at
+          any width; CSS only caps how tall it may get. */}
+      <div
+        className={`hero-wrap ${portrait ? 'portrait' : ''}`}
+        style={frameRatio ? { '--ar': String(frameRatio) } : undefined}
+      >
         {analysis.thumbnail ? (
           <>
             {/* The blurred fill is unrecognisable anyway — ask for a tiny variant. */}
@@ -78,9 +94,9 @@ export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refre
               className="hero-img"
               src={analysis.thumbnail}
               srcSet={analysis.thumbnailSrcset || undefined}
-              sizes={portrait ? '(max-width: 640px) 60vw, 260px' : '(max-width: 640px) 100vw, 64vw'}
+              sizes={portrait ? '(max-width: 640px) 60vw, 300px' : '(max-width: 640px) 100vw, 64vw'}
               alt=""
-              style={portrait && ratio ? { aspectRatio: String(ratio) } : undefined}
+              onLoad={measure}
             />
           </>
         ) : (
