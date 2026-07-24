@@ -5,10 +5,18 @@ import { fmtDuration, fmtSize, parseUrlTimestamp } from '../utils'
 const AUDIO_FORMATS = ['mp3', 'm4a', 'opus', 'wav']
 const CONTAINERS = ['mp4', 'mkv', 'webm']
 
-/** Single video: 21:9 hero, then title/length, then the download options. */
+/** Single video: hero shaped to the video's real aspect, then title/length, then options. */
 export default function MediaPanel({ analysis, onStart }) {
   const audioOnly = analysis.music
   const duration = Math.round(analysis.durationSeconds || 0)
+
+  // Shorts and phone footage are vertical; forcing them into a wide box cropped the
+  // frame. Shape the hero to the source instead, and letterbox the rest with a
+  // blurred copy of the thumbnail so the panel keeps its width either way.
+  const ratio = analysis.videoWidth && analysis.videoHeight
+    ? analysis.videoWidth / analysis.videoHeight
+    : null
+  const portrait = ratio != null && ratio < 1
 
   // A pasted link may already carry a start time (?t=90). If so, open the trim
   // controls pre-set to it instead of making the user re-enter anything.
@@ -42,11 +50,25 @@ export default function MediaPanel({ analysis, onStart }) {
 
   return (
     <section className="panel glass">
-      {analysis.thumbnail ? (
-        <img className="hero" src={analysis.thumbnail} alt="" />
-      ) : (
-        <div className="hero hero-empty"><i className="fa-solid fa-music" /></div>
-      )}
+      <div
+        className={`hero-wrap ${portrait ? 'portrait' : ''}`}
+        style={ratio && !portrait ? { aspectRatio: String(ratio) } : undefined}
+      >
+        {analysis.thumbnail ? (
+          <>
+            <img className="hero-bg" src={analysis.thumbnail} alt="" aria-hidden="true" />
+            <img
+              className="hero-img"
+              src={analysis.thumbnail}
+              alt=""
+              style={portrait ? { aspectRatio: String(ratio) } : undefined}
+            />
+          </>
+        ) : (
+          <div className="hero-empty"><i className="fa-solid fa-music" /></div>
+        )}
+        {ratio && <span className="hero-dim">{analysis.videoWidth}×{analysis.videoHeight}</span>}
+      </div>
 
       <div className="media-head">
         <h2 className="title">{analysis.title || 'Untitled'}</h2>
