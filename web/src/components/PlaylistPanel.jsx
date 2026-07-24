@@ -38,29 +38,31 @@ export default function PlaylistPanel({ analysis, onStart }) {
       const info = await analyze(item.url)
       const formats = info.videoFormats || []
       setProbes((p) => ({ ...p, [item.index]: { loading: false, formats } }))
-      setPerItem((p) => ({
-        ...p,
-        [item.index]: p[item.index] || { height: formats[0]?.height ?? height, container },
-      }))
+      // Keep the user's pick if this item offers it; otherwise snap to its best.
+      setPerItem((p) => {
+        const cur = p[item.index] || { height, container, audioFormat }
+        const stillValid = formats.some((f) => f.height === cur.height)
+        return { ...p, [item.index]: { ...cur, height: stillValid ? cur.height : (formats[0]?.height ?? cur.height) } }
+      })
     } catch (e) {
       setProbes((p) => ({ ...p, [item.index]: { loading: false, error: e.message || 'Could not read formats' } }))
     }
   }
 
   function toggle(item) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(item.index)) next.delete(item.index)
-      else {
-        next.add(item.index)
-        probe(item)
-      }
-      return next
-    })
+    const on = selected.has(item.index)
+    const next = new Set(selected)
+    if (on) next.delete(item.index)
+    else next.add(item.index)
+    setSelected(next)
+    if (!on) {
+      setPerItem((p) => (p[item.index] ? p : { ...p, [item.index]: { height, container, audioFormat } }))
+      probe(item)
+    }
   }
 
   function setItemField(index, field, value) {
-    setPerItem((p) => ({ ...p, [index]: { ...(p[index] || { height, container }), [field]: value } }))
+    setPerItem((p) => ({ ...p, [index]: { ...(p[index] || { height, container, audioFormat }), [field]: value } }))
   }
 
   function submit() {
@@ -80,13 +82,13 @@ export default function PlaylistPanel({ analysis, onStart }) {
     chosen.forEach((idx) => {
       const item = items.find((i) => i.index === idx)
       if (!item?.url) return
-      const cfg = perItem[idx] || { height, container }
+      const cfg = perItem[idx] || { height, container, audioFormat }
       onStart({
         url: item.url,
         kind: isAudio ? 'audio' : 'video',
         height: isAudio ? null : cfg.height,
         container: isAudio ? null : cfg.container,
-        audioFormat: isAudio ? audioFormat : null,
+        audioFormat: isAudio ? (cfg.audioFormat || audioFormat) : null,
         playlist: false,
         title: item.title,
       })
@@ -117,9 +119,11 @@ export default function PlaylistPanel({ analysis, onStart }) {
         </div>
       )}
 
-      {isAudio ? (
+      {/* Shared settings only apply in "download all" mode — in multi-select every
+          item carries its own, so these are hidden (audio and video alike). */}
+      {all && (isAudio ? (
         <div className="field">
-          <label>Audio format{all ? ' — applies to every item' : ''}</label>
+          <label>Audio format — applies to every item</label>
           <div className="pills">
             {AUDIO_FORMATS.map((a) => (
               <button key={a} className={`pill ${audioFormat === a ? 'active' : ''}`} onClick={() => setAudioFormat(a)}>
@@ -129,31 +133,29 @@ export default function PlaylistPanel({ analysis, onStart }) {
           </div>
         </div>
       ) : (
-        all && (
-          <>
-            <div className="field">
-              <label>Quality — applies to every item</label>
-              <div className="pills">
-                {analysis.videoFormats.map((f) => (
-                  <button key={f.height} className={`pill ${height === f.height ? 'active' : ''}`} onClick={() => setHeight(f.height)}>
-                    {f.label}
-                  </button>
-                ))}
-              </div>
+        <>
+          <div className="field">
+            <label>Quality — applies to every item</label>
+            <div className="pills">
+              {analysis.videoFormats.map((f) => (
+                <button key={f.height} className={`pill ${height === f.height ? 'active' : ''}`} onClick={() => setHeight(f.height)}>
+                  {f.label}
+                </button>
+              ))}
             </div>
-            <div className="field">
-              <label>Container</label>
-              <div className="pills">
-                {CONTAINERS.map((c) => (
-                  <button key={c} className={`pill ${container === c ? 'active' : ''}`} onClick={() => setContainer(c)}>
-                    {c.toUpperCase()}
-                  </button>
-                ))}
-              </div>
+          </div>
+          <div className="field">
+            <label>Container</label>
+            <div className="pills">
+              {CONTAINERS.map((c) => (
+                <button key={c} className={`pill ${container === c ? 'active' : ''}`} onClick={() => setContainer(c)}>
+                  {c.toUpperCase()}
+                </button>
+              ))}
             </div>
-          </>
-        )
-      )}
+          </div>
+        </>
+      ))}
 
       <label className="checkbox">
         <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
@@ -164,14 +166,14 @@ export default function PlaylistPanel({ analysis, onStart }) {
         <>
           <p className="pl-selnote">
             {chosen.length > 0
-              ? `Only ${chosen.length} selected ${chosen.length === 1 ? 'video' : 'videos'} will be downloaded — each with its own quality`
-              : 'Tick the videos you want, then pick a quality for each'}
+              ? `Only ${chosen.length} selected ${chosen.length === 1 ? 'video' : 'videos'} will be downloaded — each with its own ${isAudio ? 'format' : 'quality'}`
+              : `Tick the videos you want, then pick a ${isAudio ? 'format' : 'quality'} for each`}
           </p>
           <div className="pl-list">
             {items.map((it) => {
               const on = selected.has(it.index)
               const pr = probes[it.index] || {}
-              const cfg = perItem[it.index] || { height, container }
+              const cfg = perItem[it.index] || { height, container, audioFormat }
               return (
                 <div key={it.index} className={`pl-item glass ${on ? 'selected' : ''}`}>
                   <input
@@ -189,12 +191,25 @@ export default function PlaylistPanel({ analysis, onStart }) {
                     {!on && (
                       <div className="pl-chips">
                         <span className="pl-hint">
-                          <i className="fa-regular fa-circle-question" /> Select to see available resolutions
+                          <i className="fa-regular fa-circle-question" />{' '}
+                          {isAudio ? 'Select to choose audio format' : 'Select to see available resolutions'}
                         </span>
                       </div>
                     )}
 
-                    {on && isAudio && <div className="pl-chips"><span className="pill info">{audioFormat.toUpperCase()}</span></div>}
+                    {on && isAudio && (
+                      <div className="pl-chips">
+                        {AUDIO_FORMATS.map((a) => (
+                          <button
+                            key={a}
+                            className={`pill sm ${cfg.audioFormat === a ? 'active' : ''}`}
+                            onClick={() => setItemField(it.index, 'audioFormat', a)}
+                          >
+                            {a.toUpperCase()}
+                          </button>
+                        ))}
+                      </div>
+                    )}
 
                     {on && !isAudio && pr.loading && (
                       <div className="pl-chips muted small">
@@ -245,7 +260,7 @@ export default function PlaylistPanel({ analysis, onStart }) {
         <i className="fa-solid fa-download" />
         {all
           ? `Download all ${count} · ${sharedLabel}`
-          : `Download ${chosen.length || ''} selected${isAudio ? ` · ${audioFormat.toUpperCase()}` : ''}`}
+          : `Download ${chosen.length || ''} selected`}
       </button>
     </section>
   )

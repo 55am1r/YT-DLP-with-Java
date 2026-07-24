@@ -261,7 +261,7 @@ body {
 .pl-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .pl-check { margin-top: 2px; }
 .pl-hint { font-size: 11.5px; color: var(--muted); font-style: italic; }
-.pl-selnote { font-size: 13px; color: var(--accent-2); margin: 2px 0 10px; font-weight: 600; }
+.pl-selnote { font-size: 13px; color: var(--text); margin: 2px 0 10px; font-weight: 700; }
 
 /* ---------- Downloads ---------- */
 .dl-head { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 12px; }
