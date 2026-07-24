@@ -102,7 +102,11 @@ public class YtDlpService {
         String title = text(root, "title");
         String uploader = firstText(root, "uploader", "channel", "playlist_uploader", "uploader_id");
         Long duration = (root.has("duration") && root.get("duration").isNumber()) ? root.get("duration").asLong() : null;
-        String thumb = pickThumbnail(root);
+        // Real pixel size drives both the thumbnail we pick and how the UI shapes it,
+        // so a vertical video never gets squeezed into a landscape frame.
+        int[] dim = videoDimensions(root);
+        double ratio = (dim[0] > 0 && dim[1] > 0) ? (double) dim[0] / dim[1] : 16.0 / 9.0;
+        String thumb = pickThumbnail(root, ratio);
 
         Integer count = null;
         List<VideoFormatOption> formats;
@@ -124,7 +128,8 @@ public class YtDlpService {
         if (formats.isEmpty() && !music) {
             formats = standardTiers();
         }
-        return new AnalyzeResult(url, playlist, title, uploader, duration, thumb, music, count, formats, items);
+        return new AnalyzeResult(url, playlist, title, uploader, duration, thumb, music, count, formats, items,
+                dim[0] > 0 ? dim[0] : null, dim[1] > 0 ? dim[1] : null);
     }
 
     private List<VideoFormatOption> parseFormats(JsonNode root) {
@@ -478,6 +483,10 @@ public class YtDlpService {
     private List<Path> listMedia(Path dir) throws IOException {
         try (var s = Files.list(dir)) {
             return s.filter(Files::isRegularFile)
+                    // macOS writes AppleDouble side-cars ("._name.mp4") on network volumes.
+                    // They carry a media extension, so without this they end up inside the
+                    // zip as junk files that Windows users see alongside the real videos.
+                    .filter(p -> !p.getFileName().toString().startsWith("."))
                     .filter(p -> MEDIA_EXT.contains(ext(p)))
                     .sorted()
                     .toList();
@@ -579,15 +588,69 @@ public class YtDlpService {
     }
 
     private static String pickThumbnail(JsonNode root) {
+        return pickThumbnail(root, 16.0 / 9.0);
+    }
+
+    /**
+     * Prefer the largest thumbnail whose shape matches the video. YouTube ships several
+     * per video, and for vertical/Shorts the default is a 16:9 image with the real frame
+     * padded inside — picking by aspect keeps portrait videos looking portrait.
+     */
+    private static String pickThumbnail(JsonNode root, double targetRatio) {
+        JsonNode th = root.path("thumbnails");
+        String best = null;
+        double bestDiff = Double.MAX_VALUE;
+        long bestArea = 0;
+        if (th.isArray()) {
+            for (JsonNode t : th) {
+                String url = text(t, "url");
+                int w = t.path("width").asInt(0);
+                int h = t.path("height").asInt(0);
+                if (url == null || w <= 0 || h <= 0) {
+                    continue;
+                }
+                double diff = Math.abs((double) w / h - targetRatio);
+                long area = (long) w * h;
+                if (diff < bestDiff - 0.05 || (Math.abs(diff - bestDiff) <= 0.05 && area > bestArea)) {
+                    bestDiff = diff;
+                    bestArea = area;
+                    best = url;
+                }
+            }
+        }
+        if (best != null) {
+            return best;
+        }
         String t = text(root, "thumbnail");
         if (t != null) {
             return t;
         }
-        JsonNode th = root.path("thumbnails");
-        if (th.isArray() && !th.isEmpty()) {
-            return text(th.get(th.size() - 1), "url");
+        return (th.isArray() && !th.isEmpty()) ? text(th.get(th.size() - 1), "url") : null;
+    }
+
+    /** Native video dimensions, taken from the highest-resolution video stream. */
+    private static int[] videoDimensions(JsonNode root) {
+        JsonNode formats = root.path("formats");
+        int bw = 0;
+        int bh = 0;
+        if (formats.isArray()) {
+            for (JsonNode f : formats) {
+                if ("none".equals(f.path("vcodec").asText("none"))) {
+                    continue;
+                }
+                int h = f.path("height").asInt(0);
+                int w = f.path("width").asInt(0);
+                if (h > bh && w > 0) {
+                    bh = h;
+                    bw = w;
+                }
+            }
         }
-        return null;
+        if (bh == 0) {
+            bh = root.path("height").asInt(0);
+            bw = root.path("width").asInt(0);
+        }
+        return new int[] { bw, bh };
     }
 
     private static String firstError(String stderr) {

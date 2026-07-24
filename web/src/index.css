@@ -170,9 +170,30 @@ body {
 /* ---------- Panels ---------- */
 .panel { border-radius: 18px; padding: 18px; margin-bottom: 20px; }
 
-/* Single video: 21:9 hero, then title, then options */
-.hero { width: 100%; aspect-ratio: 21 / 9; object-fit: cover; border-radius: 14px; background: var(--bg-2); display: block; }
-.hero-empty { display: grid; place-items: center; font-size: 40px; color: var(--muted); }
+/* Single video: hero takes the video's own aspect ratio (set inline from the
+   analysis), so vertical clips stay vertical. Anything the frame doesn't cover
+   is filled by a blurred copy of the same thumbnail rather than a hard crop. */
+.hero-wrap {
+  position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 14px;
+  overflow: hidden; background: var(--bg-2); display: grid; place-items: center;
+}
+.hero-wrap.portrait { --hero-h: min(58vh, 420px); aspect-ratio: auto; height: var(--hero-h); }
+.hero-bg {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  filter: blur(26px) saturate(150%); transform: scale(1.2); opacity: 0.45;
+}
+/* The box is already the video's true shape, so cover here crops away the padding
+   YouTube bakes into its thumbnails for vertical clips instead of stacking bars. */
+.hero-img { position: relative; display: block; width: 100%; height: 100%; object-fit: cover; }
+/* Size off the fixed height, not percentages — a percentage height won't resolve
+   against the grid area here, which stretched the portrait frame to full width. */
+.hero-wrap.portrait .hero-img { height: var(--hero-h); width: auto; max-width: 100%; }
+.hero-dim {
+  position: absolute; right: 10px; bottom: 10px; padding: 3px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.3px;
+  background: rgba(0, 0, 0, 0.55); color: #fff; backdrop-filter: blur(6px);
+}
+.hero-empty { display: grid; place-items: center; width: 100%; height: 100%; font-size: 40px; color: var(--muted); }
 .media-head { padding: 14px 2px 4px; }
 .title { font-size: 18px; margin: 0 0 4px; line-height: 1.3; }
 .tag {
@@ -255,7 +276,8 @@ body {
 .pl-list { display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow-y: auto; padding: 2px; margin-bottom: 14px; }
 .pl-item { display: flex; gap: 12px; padding: 10px; border-radius: 12px; align-items: flex-start; }
 .pl-item.selected { border-color: var(--accent); box-shadow: inset 0 1px 0 var(--glass-edge), 0 0 0 1px rgba(225, 29, 42, 0.4); }
-.pl-thumb { width: 132px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 9px; background: var(--bg-2); flex: 0 0 auto; }
+/* contain, not cover — a vertical item shows letterboxed rather than centre-cropped */
+.pl-thumb { width: 132px; aspect-ratio: 16 / 9; object-fit: contain; border-radius: 9px; background: var(--bg-2); flex: 0 0 auto; }
 .pl-meta { min-width: 0; flex: 1; }
 .pl-title { font-size: 13.5px; font-weight: 600; margin: 0 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pl-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
