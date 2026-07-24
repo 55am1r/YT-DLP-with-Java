@@ -563,11 +563,11 @@ public class YtDlpService {
      */
     private static String label(int h) {
         return switch (h) {
-            case 4320 -> "4320p (8K)";
-            case 2160 -> "2160p (4K)";
-            case 1440 -> "1440p (2K)";
-            case 1080 -> "1080p (Full HD)";
-            case 720 -> "720p (HD)";
+            case 4320 -> "4320p · UHD-8K";
+            case 2160 -> "2160p · UHD";
+            case 1440 -> "1440p · QHD";
+            case 1080 -> "1080p · FHD";
+            case 720 -> "720p · HD";
             default -> h + "p";
         };
     }

@@ -229,6 +229,13 @@ body {
   box-shadow: inset 0 1px 0 var(--glass-edge-hover);
 }
 .pill.active { border-color: var(--accent); background: rgba(225, 29, 42, 0.16); color: var(--text); }
+/* The plain hover used to overwrite the selected tint, so hovering a chosen pill
+   made it look unselected. Selected pills deepen their own accent instead. */
+.pill.active:hover:not(:disabled) {
+  background: rgba(225, 29, 42, 0.28);
+  border-color: var(--accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 0 0 3px rgba(225, 29, 42, 0.12);
+}
 .pill-sub { font-size: 11.5px; color: var(--muted); }
 .pill.active .pill-sub { color: var(--accent-2); }
 /* info-only chips in the playlist list — visible but not selectable */
