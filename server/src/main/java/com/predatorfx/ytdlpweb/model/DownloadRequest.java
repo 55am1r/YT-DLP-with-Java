@@ -15,6 +15,8 @@ import java.util.List;
  * @param startTime    optional clip start, "HH:MM:SS" or seconds — trims the download
  * @param endTime      optional clip end, "HH:MM:SS" or seconds
  * @param items        optional 1-based playlist item numbers to download (multi-select)
+ * @param codec        compression choice from the Advanced tab; "none" keeps the source
+ *                     streams untouched, which is what the Auto tab always sends
  */
 public record DownloadRequest(
         String url,
@@ -26,7 +28,8 @@ public record DownloadRequest(
         String title,
         String startTime,
         String endTime,
-        List<Integer> items) {
+        List<Integer> items,
+        String codec) {
 
     public boolean isAudio() {
         return kind == null || kind.equalsIgnoreCase("audio");
@@ -44,6 +47,10 @@ public record DownloadRequest(
         return (height == null || height <= 0) ? 1080 : height;
     }
 
+    public String codecOrDefault() {
+        return (codec == null || codec.isBlank()) ? "none" : codec.trim().toLowerCase();
+    }
+
     /** The container the finished file will actually use. */
     public String targetExtension() {
         return isAudio() ? audioFormatOrDefault() : containerOrDefault();
@@ -55,5 +62,26 @@ public record DownloadRequest(
 
     public boolean hasItemSelection() {
         return items != null && !items.isEmpty();
+    }
+
+    /**
+     * Identity of the *output* this request would produce. Two requests with the same
+     * signature would download the same bytes twice, so the UI asks before repeating
+     * one — that is the whole point of the duplicate guard.
+     */
+    public String signature() {
+        String sel = hasItemSelection()
+                ? items().stream().sorted().map(String::valueOf).reduce((a, b) -> a + "," + b).orElse("")
+                : "";
+        return String.join("|",
+                url() == null ? "" : url().trim(),
+                isAudio() ? "audio" : "video",
+                isAudio() ? audioFormatOrDefault() : String.valueOf(heightOrDefault()),
+                isAudio() ? "" : containerOrDefault(),
+                isAudio() ? "" : codecOrDefault(),
+                String.valueOf(playlist()),
+                sel,
+                startTime() == null ? "" : startTime().trim(),
+                endTime() == null ? "" : endTime().trim());
     }
 }

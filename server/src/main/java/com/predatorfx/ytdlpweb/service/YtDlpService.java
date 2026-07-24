@@ -6,6 +6,7 @@ import com.predatorfx.ytdlpweb.model.AnalyzeResult;
 import com.predatorfx.ytdlpweb.model.DownloadRequest;
 import com.predatorfx.ytdlpweb.model.Job;
 import com.predatorfx.ytdlpweb.model.JobStatus;
+import com.predatorfx.ytdlpweb.model.PlaylistFormats;
 import com.predatorfx.ytdlpweb.model.PlaylistItem;
 import com.predatorfx.ytdlpweb.model.VideoFormatOption;
 import com.predatorfx.ytdlpweb.util.Processes;
@@ -24,7 +25,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.regex.Matcher;
@@ -59,6 +65,9 @@ public class YtDlpService {
     private static final Set<String> THUMBNAIL_OK = Set.of(
             "mp3", "mka", "mkv", "ogg", "opus", "flac", "m4a", "mp4", "m4v", "mov");
 
+    /** Past this, probing every item costs more than the zip option is worth. */
+    private static final int MAX_UNIFORMITY_PROBE = 100;
+
     private static final Set<String> MEDIA_EXT = Set.of(
             "mp3", "m4a", "opus", "ogg", "wav", "flac", "aac",
             "mp4", "mkv", "webm", "mov", "m4v");
@@ -74,8 +83,17 @@ public class YtDlpService {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
+    private final CodecCatalog codecs;
+
     /** Live yt-dlp processes by job id, so downloads can be paused/canceled. */
     private final Map<String, Process> processes = new ConcurrentHashMap<>();
+
+    /** Uniformity verdicts by playlist URL — probing every item is far too slow to redo. */
+    private final Map<String, PlaylistFormats> playlistFormatCache = new ConcurrentHashMap<>();
+
+    public YtDlpService(CodecCatalog codecs) {
+        this.codecs = codecs;
+    }
 
     public Path workDir() {
         return Path.of(workDirCfg);
@@ -130,6 +148,88 @@ public class YtDlpService {
         }
         return new AnalyzeResult(url, playlist, title, uploader, duration, thumb, music, count, formats, items,
                 dim[0] > 0 ? dim[0] : null, dim[1] > 0 ? dim[1] : null);
+    }
+
+    /** Formats for one video URL — used when probing playlist items one by one. */
+    public List<VideoFormatOption> probeFormats(String url) throws IOException {
+        AnalyzeResult a = analyze(url);
+        return a.videoFormats() == null ? List.of() : a.videoFormats();
+    }
+
+    /**
+     * Read every item in a playlist and decide whether they all offer the same
+     * resolutions. A "download all as one zip" only makes sense when they do — otherwise
+     * a single quality setting silently means different things for different items.
+     *
+     * Items are probed in parallel because each one costs a full yt-dlp extraction, and
+     * the verdict is cached per playlist URL since it cannot change while a user is
+     * looking at the page.
+     */
+    public PlaylistFormats playlistFormats(String url) throws IOException {
+        PlaylistFormats cached = playlistFormatCache.get(url);
+        if (cached != null) {
+            return cached;
+        }
+        AnalyzeResult a = analyze(url);
+        List<PlaylistItem> items = a.items();
+        if (!a.playlist() || items.isEmpty()) {
+            throw new IOException("That link is not a playlist");
+        }
+        if (items.size() > MAX_UNIFORMITY_PROBE) {
+            return cache(url, new PlaylistFormats(false, List.of(), 0, items.size(),
+                    "This playlist has " + items.size() + " items — too many to verify, so pick videos individually."));
+        }
+        // A music playlist has no video streams to compare; zipping is always fine.
+        if (a.music()) {
+            return cache(url, new PlaylistFormats(true, List.of(), items.size(), items.size(), null));
+        }
+
+        List<List<VideoFormatOption>> results;
+        ExecutorService pool = Executors.newFixedThreadPool(Math.min(6, items.size()));
+        try {
+            List<Future<List<VideoFormatOption>>> futures = new ArrayList<>();
+            for (PlaylistItem it : items) {
+                futures.add(pool.submit(() -> it.url() == null ? null : probeFormats(it.url())));
+            }
+            results = new ArrayList<>();
+            for (Future<List<VideoFormatOption>> f : futures) {
+                try {
+                    results.add(f.get());
+                } catch (ExecutionException e) {
+                    results.add(null); // this item could not be read
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Interrupted while reading the playlist");
+                }
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+
+        int failed = (int) results.stream().filter(r -> r == null).count();
+        if (failed > 0) {
+            return cache(url, new PlaylistFormats(false, List.of(), items.size() - failed, items.size(),
+                    failed + " of " + items.size() + " videos could not be read, so they can't be zipped as one set."));
+        }
+
+        // Uniform means every item exposes exactly the same heights — not merely overlapping.
+        Set<Integer> first = heights(results.get(0));
+        boolean uniform = results.stream().allMatch(r -> heights(r).equals(first));
+        if (!uniform) {
+            return cache(url, new PlaylistFormats(false, List.of(), items.size(), items.size(),
+                    "These videos don't all offer the same resolutions, so pick them individually."));
+        }
+        // Same heights everywhere — reuse item 1's labels (fps notes and all).
+        return cache(url, new PlaylistFormats(true, results.get(0), items.size(), items.size(), null));
+    }
+
+    private PlaylistFormats cache(String url, PlaylistFormats pf) {
+        playlistFormatCache.put(url, pf);
+        return pf;
+    }
+
+    private static Set<Integer> heights(List<VideoFormatOption> formats) {
+        return formats.stream().map(VideoFormatOption::height).collect(Collectors.toCollection(TreeSet::new));
     }
 
     private List<VideoFormatOption> parseFormats(JsonNode root) {
@@ -252,6 +352,18 @@ public class YtDlpService {
             throw new IOException("Download finished but no media file was produced");
         }
 
+        // Advanced tab only: re-encode to the requested codec. Auto always sends "none",
+        // which skips this entirely and keeps today's lossless behaviour.
+        if (!req.isAudio() && codecs.isReencode(req.codecOrDefault())) {
+            for (int i = 0; i < produced.size(); i++) {
+                if (job.isCanceled()) {
+                    finishCanceled(job, jobDir, onUpdate);
+                    return;
+                }
+                produced.set(i, compress(produced.get(i), req, job, i + 1, produced.size(), onUpdate));
+            }
+        }
+
         Path deliver;
         if (!req.playlist() || produced.size() == 1) {
             deliver = produced.stream().max(Comparator.comparingLong(YtDlpService::size)).orElseThrow();
@@ -299,6 +411,17 @@ public class YtDlpService {
         }
         cmd.add("--concurrent-fragments");
         cmd.add("8");
+        // Matrix testing showed YouTube intermittently dropping a fragment when several
+        // jobs run at once — the same request succeeded on a retry. Without these, that
+        // surfaces to the user as a flat "download failed" for no visible reason.
+        cmd.add("--retries");
+        cmd.add("5");
+        cmd.add("--fragment-retries");
+        cmd.add("10");
+        cmd.add("--extractor-retries");
+        cmd.add("3");
+        cmd.add("--retry-sleep");
+        cmd.add("2");
         cmd.add(req.playlist() ? "--yes-playlist" : "--no-playlist");
         cmd.add("--embed-metadata");
         if (THUMBNAIL_OK.contains(req.targetExtension())) {
@@ -330,11 +453,31 @@ public class YtDlpService {
         } else {
             int h = req.heightOrDefault();
             cmd.add("-f");
-            cmd.add("bestvideo[height<=" + h + "]+bestaudio/best[height<=" + h + "]/best");
+            cmd.add(formatSelector(h, req.containerOrDefault()));
             cmd.add("--merge-output-format");
             cmd.add(req.containerOrDefault());
         }
         return cmd;
+    }
+
+    /**
+     * Which streams to fetch for a target container.
+     *
+     * WEBM is the awkward one: it can legally hold only VP8/VP9/AV1 video with Opus or
+     * Vorbis audio. yt-dlp's plain "bestvideo+bestaudio" happily picks AVC1 + M4A, and
+     * the merge into .webm then dies with "Postprocessing: Conversion failed!" — which
+     * is exactly what every WEBM download used to do. Restricting the picks to webm
+     * streams is what makes that container work at all.
+     *
+     * MP4 and MKV accept everything YouTube serves, so they keep the unrestricted
+     * selection and therefore the best available quality.
+     */
+    private static String formatSelector(int height, String container) {
+        if ("webm".equals(container)) {
+            return "bestvideo[height<=" + height + "][ext=webm]+bestaudio[ext=webm]"
+                    + "/best[height<=" + height + "][ext=webm]";
+        }
+        return "bestvideo[height<=" + height + "]+bestaudio/best[height<=" + height + "]/best";
     }
 
     private void handleLine(String line, Job job, int[] lastEmitted, Consumer<Job> onUpdate) {
@@ -403,6 +546,150 @@ public class YtDlpService {
         job.setStatus(status);
         job.setPhase(phase);
         onUpdate.accept(job);
+    }
+
+    // ------------------------------------------------------------ COMPRESSION
+
+    /**
+     * Re-encode one finished file to the codec picked in the Advanced tab, in place.
+     *
+     * Only the first video stream is re-encoded — {@code -c copy} plus a stream-specific
+     * {@code -c:v:0} override means audio, subtitles and the embedded cover art are
+     * carried over untouched, so we never lose the thumbnail we just embedded and never
+     * try to run cover art through a video encoder.
+     */
+    private Path compress(Path src, DownloadRequest req, Job job, int idx, int total, Consumer<Job> onUpdate)
+            throws IOException, InterruptedException {
+        String codec = req.codecOrDefault();
+        String ext = ext(src);
+        Path out = src.resolveSibling(stripExt(src.getFileName().toString()) + ".enc." + ext);
+        double durationSec = probeDurationSeconds(src);
+        long before = size(src);
+        long srcKbps = videoBitrateKbps(src, durationSec, before);
+
+        List<String> cmd = new ArrayList<>(List.of(
+                ffmpegBin, "-y", "-nostdin", "-loglevel", "error",
+                "-progress", "pipe:1", "-nostats",
+                "-i", src.toString(),
+                "-map", "0", "-c", "copy"));
+        // The catalog gives "-c:v <encoder> …"; retarget it at stream v:0 only.
+        List<String> enc = codecs.encodeArgs(codec, srcKbps);
+        for (int i = 0; i < enc.size(); i++) {
+            cmd.add("-c:v".equals(enc.get(i)) ? "-c:v:0" : enc.get(i));
+        }
+        if ("hevc".equals(codec) && "mp4".equals(ext)) {
+            cmd.add("-tag:v:0"); // QuickTime and Premiere refuse HEVC in MP4 without it
+            cmd.add("hvc1");
+        }
+        if ("mp4".equals(ext)) {
+            cmd.add("-movflags");
+            cmd.add("+faststart");
+        }
+        cmd.add(out.toString());
+
+        String what = codecs.labelOf(codec);
+        String prefix = total > 1 ? "Compressing " + idx + "/" + total + " to " + what : "Compressing to " + what;
+        job.setStatus(JobStatus.COMPRESSING);
+        job.setPhase(prefix + "…");
+        job.setSpeed(null);
+        job.setEta(null);
+        onUpdate.accept(job);
+        log.info("Job {} compressing: {}", job.getId(), String.join(" ", cmd));
+
+        int[] last = {-1};
+        int exit;
+        try {
+            exit = Processes.stream(cmd, src.getParent(),
+                    proc -> processes.put(job.getId(), proc),
+                    line -> {
+                        if (job.isCanceled() || durationSec <= 0) {
+                            return;
+                        }
+                        // ffmpeg -progress emits "out_time_us=1234567" lines.
+                        if (line.startsWith("out_time_us=")) {
+                            String v = line.substring("out_time_us=".length()).trim();
+                            long us;
+                            try {
+                                us = Long.parseLong(v);
+                            } catch (NumberFormatException e) {
+                                return; // "N/A" before the first frame lands
+                            }
+                            int pct = (int) Math.min(100, Math.floor(us / 1_000_000.0 / durationSec * 100));
+                            if (pct != last[0]) {
+                                last[0] = pct;
+                                job.setProgress(pct);
+                                job.setPhase(prefix + "… " + pct + "%");
+                                onUpdate.accept(job);
+                            }
+                        }
+                    });
+        } finally {
+            processes.remove(job.getId());
+        }
+
+        if (job.isCanceled()) {
+            return src;
+        }
+        if (exit != 0 || !Files.exists(out) || size(out) == 0) {
+            Files.deleteIfExists(out);
+            throw new IOException("Compression to " + what + " failed (ffmpeg exit " + exit + ")");
+        }
+
+        Files.move(out, src, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        long after = size(src);
+        log.info("Job {} compressed {} → {} ({} → {} bytes)", job.getId(), ext, codec, before, after);
+        return src;
+    }
+
+    /**
+     * Video bitrate of the source in kbit/s. Containers don't always store a per-stream
+     * bitrate (WEBM and MKV frequently report nothing), so fall back to deriving it from
+     * file size over duration — close enough to aim a target at.
+     */
+    private long videoBitrateKbps(Path file, double durationSec, long bytes) {
+        try {
+            Processes.Result r = Processes.run(List.of(ffprobeBin(), "-v", "error",
+                    "-select_streams", "v:0", "-show_entries", "stream=bit_rate",
+                    "-of", "csv=p=0", file.toString()), Duration.ofSeconds(20));
+            String s = r.stdout().trim();
+            int nl = s.indexOf('\n');
+            if (nl > 0) {
+                s = s.substring(0, nl).trim();
+            }
+            if (!s.isEmpty() && !"N/A".equals(s)) {
+                long bps = Long.parseLong(s);
+                if (bps > 0) {
+                    return bps / 1000;
+                }
+            }
+        } catch (Exception ignored) {
+            // fall through to the size-based estimate
+        }
+        if (durationSec > 0 && bytes > 0) {
+            // Whole-file rate minus a rough allowance for the audio track.
+            long total = Math.round(bytes * 8.0 / durationSec / 1000.0);
+            return Math.max(120, total - 160);
+        }
+        return 0;
+    }
+
+    /** Length in seconds, used to turn ffmpeg's progress into a percentage. */
+    private double probeDurationSeconds(Path file) {
+        try {
+            Processes.Result r = Processes.run(List.of(ffprobeBin(), "-v", "error",
+                    "-show_entries", "format=duration", "-of", "csv=p=0", file.toString()),
+                    Duration.ofSeconds(20));
+            String s = r.stdout().trim();
+            return s.isEmpty() ? 0 : Double.parseDouble(s);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private String ffprobeBin() {
+        return (ffmpegBin != null && ffmpegBin.contains("/"))
+                ? Path.of(ffmpegBin).resolveSibling("ffprobe").toString()
+                : "ffprobe";
     }
 
     // ------------------------------------------------------------- CONTROLS
@@ -516,10 +803,7 @@ public class YtDlpService {
     /** Real height of the finished video, so a card can say "1080p" instead of guessing. */
     private Integer probeHeight(Path file) {
         try {
-            String ffprobe = (ffmpegBin != null && ffmpegBin.contains("/"))
-                    ? Path.of(ffmpegBin).resolveSibling("ffprobe").toString()
-                    : "ffprobe";
-            Processes.Result r = Processes.run(List.of(ffprobe, "-v", "error",
+            Processes.Result r = Processes.run(List.of(ffprobeBin(), "-v", "error",
                     "-select_streams", "v:0", "-show_entries", "stream=height",
                     "-of", "csv=p=0", file.toString()), Duration.ofSeconds(20));
             String s = r.stdout().trim();

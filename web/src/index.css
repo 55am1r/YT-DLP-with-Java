@@ -101,6 +101,28 @@ body {
 }
 .icon-btn:active { transform: translateY(1px); }
 
+/* ---------- Circular refresh, next to the Video/Audio switch ----------
+   Re-reads one link's formats. Deliberately round so it reads as an action on the
+   row it sits in, not another format choice. */
+.icon-round {
+  width: 38px; height: 38px; flex: 0 0 auto; border-radius: 50%; display: grid; place-items: center;
+  border: 1px solid var(--border-soft); background: var(--glass-bg); color: var(--text);
+  font-size: 14px; cursor: pointer; padding: 0;
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  box-shadow: inset 0 1px 0 var(--glass-edge); transition: all 0.12s;
+}
+.icon-round.sm { width: 28px; height: 28px; font-size: 11.5px; }
+.icon-round:hover:not(:disabled) {
+  background: var(--glass-bg-hover); border-color: var(--glass-edge-hover); color: var(--accent-2);
+}
+.icon-round:disabled { opacity: 0.6; cursor: default; }
+.icon-round.spinning i { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Keeps the Video/Audio segment and its refresh button on one line. */
+.kind-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.kind-row .seg { margin-bottom: 0; }
+
 .badge {
   display: inline-flex; align-items: center; gap: 8px; color: var(--text);
   padding: 8px 12px; border-radius: 999px; font-size: 12.5px; cursor: pointer;
@@ -291,6 +313,54 @@ body {
 .pl-check { margin-top: 2px; }
 .pl-hint { font-size: 11.5px; color: var(--muted); font-style: italic; }
 .pl-selnote { font-size: 13px; color: var(--text); margin: 2px 0 10px; font-weight: 700; }
+/* Why the zip option isn't on offer for this playlist. */
+.pl-warn {
+  display: flex; align-items: flex-start; gap: 9px; font-size: 13px; font-weight: 600;
+  color: var(--text); margin: 2px 0 12px; padding: 10px 12px; border-radius: 10px;
+  background: rgba(225, 29, 42, 0.10); border: 1px solid rgba(225, 29, 42, 0.28);
+}
+.pl-warn i { color: var(--accent-2); margin-top: 1px; }
+/* The per-item Auto/Advanced block sits inside a row, so it needs tighter spacing. */
+.pl-adv { margin-top: 8px; }
+.pl-adv .field { margin-bottom: 10px; }
+.pl-adv .field > label { font-size: 10.5px; margin-bottom: 5px; }
+.pl-adv .hint-line { font-size: 11px; }
+
+/* ---------- Auto / Advanced format picker ---------- */
+.seg-sm .seg-btn { padding: 5px 11px; font-size: 11.5px; }
+.hint-line {
+  display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted);
+  margin: 8px 0 0;
+}
+.hint-line i { color: var(--accent-2); }
+.codec-pill { flex-direction: column; align-items: flex-start; gap: 3px; text-align: left; }
+.codec-main { display: inline-flex; align-items: center; gap: 8px; }
+.codec-badge {
+  display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;
+}
+/* Two things worth pointing at: the smallest file, and the untouched original. */
+.codec-badge.save { background: rgba(46, 204, 113, 0.18); color: #4ade80; }
+.codec-badge.quality { background: rgba(88, 132, 255, 0.20); color: #93b0ff; }
+.codec-badge.rec { background: rgba(255, 176, 32, 0.18); color: #ffc453; }
+
+/* ---------- Duplicate-download prompt ---------- */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px;
+  background: rgba(0, 0, 0, 0.55); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+}
+.modal {
+  width: min(460px, 100%); border-radius: 18px; padding: 24px; text-align: center;
+  border: 1px solid var(--border-soft);
+}
+.modal-icon {
+  width: 52px; height: 52px; margin: 0 auto 14px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 21px; color: #fff; background: linear-gradient(145deg, var(--accent-2), var(--accent));
+}
+.modal-title { margin: 0 0 8px; font-size: 17px; }
+.modal-msg { margin: 0 0 8px; font-size: 14px; color: var(--text); }
+.modal-detail { margin: 0 0 18px; font-size: 12.5px; color: var(--muted); }
+.modal-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 
 /* ---------- Downloads ---------- */
 .dl-head { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 12px; }

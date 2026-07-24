@@ -8,6 +8,7 @@ public enum JobStatus {
     DOWNLOADING,
     PAUSED,
     PROCESSING,   // ffmpeg merge / thumbnail embed / metadata
+    COMPRESSING,  // re-encoding to the chosen codec (Advanced tab)
     PACKAGING,    // zipping a playlist into one file
     COMPLETED,
     CANCELED,

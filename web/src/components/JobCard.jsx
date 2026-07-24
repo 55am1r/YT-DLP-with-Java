@@ -9,14 +9,17 @@ const LABELS = {
   DOWNLOADING: 'Downloading',
   PAUSED: 'Paused',
   PROCESSING: 'Processing',
+  COMPRESSING: 'Compressing',
   PACKAGING: 'Packaging',
   COMPLETED: 'Done',
   CANCELED: 'Canceled',
   FAILED: 'Failed',
 }
 
+// COMPRESSING reports a real percentage from ffmpeg, so it gets a real bar.
 const INDETERMINATE = new Set(['QUEUED', 'CHECKING_UPDATES', 'ANALYZING', 'PROCESSING', 'PACKAGING'])
-const ACTIVE = new Set(['QUEUED', 'CHECKING_UPDATES', 'ANALYZING', 'DOWNLOADING', 'PAUSED', 'PROCESSING', 'PACKAGING'])
+const ACTIVE = new Set(['QUEUED', 'CHECKING_UPDATES', 'ANALYZING', 'DOWNLOADING', 'PAUSED', 'PROCESSING',
+  'COMPRESSING', 'PACKAGING'])
 
 // Files above this are streamed straight from the server instead of being pre-fetched,
 // so a multi-GB 4K download can't blow up the tab's memory.

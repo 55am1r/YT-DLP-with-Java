@@ -1,9 +1,12 @@
 package com.predatorfx.ytdlpweb.web;
 
 import com.predatorfx.ytdlpweb.model.AnalyzeResult;
+import com.predatorfx.ytdlpweb.model.CodecOption;
 import com.predatorfx.ytdlpweb.model.DownloadRequest;
 import com.predatorfx.ytdlpweb.model.Job;
 import com.predatorfx.ytdlpweb.model.JobStatus;
+import com.predatorfx.ytdlpweb.model.PlaylistFormats;
+import com.predatorfx.ytdlpweb.service.CodecCatalog;
 import com.predatorfx.ytdlpweb.service.JobService;
 import com.predatorfx.ytdlpweb.service.YtDlpService;
 import com.predatorfx.ytdlpweb.service.YtDlpUpdateService;
@@ -40,11 +43,14 @@ public class DownloadController {
     private final YtDlpService ytdlp;
     private final JobService jobs;
     private final YtDlpUpdateService updates;
+    private final CodecCatalog codecs;
 
-    public DownloadController(YtDlpService ytdlp, JobService jobs, YtDlpUpdateService updates) {
+    public DownloadController(YtDlpService ytdlp, JobService jobs, YtDlpUpdateService updates,
+                              CodecCatalog codecs) {
         this.ytdlp = ytdlp;
         this.jobs = jobs;
         this.updates = updates;
+        this.codecs = codecs;
     }
 
     public record UrlRequest(String url) {}
@@ -62,13 +68,54 @@ public class DownloadController {
         }
     }
 
-    /** Queue a download job. */
+    /**
+     * Queue a download job.
+     *
+     * If the same file is already downloading or sitting finished on the server, this
+     * answers 409 with that job attached instead of starting a second identical
+     * download. The UI turns that into a "you already have this — re-download?" prompt;
+     * {@code ?force=true} is the answer to it.
+     */
     @PostMapping("/jobs")
-    public Job start(@RequestBody DownloadRequest req) {
+    public ResponseEntity<Object> start(@RequestBody DownloadRequest req,
+                                        @RequestParam(defaultValue = "false") boolean force) {
         if (req == null || req.url() == null || req.url().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A URL is required");
         }
-        return jobs.submit(req);
+        if (req.container() != null && !req.isAudio()
+                && !codecs.supports(req.codecOrDefault(), req.containerOrDefault())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    req.codecOrDefault().toUpperCase() + " cannot be stored inside a "
+                            + req.containerOrDefault().toUpperCase() + " file");
+        }
+        if (!force) {
+            Job existing = jobs.findDuplicate(req);
+            if (existing != null) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("duplicate", true, "job", existing));
+            }
+        }
+        return ResponseEntity.ok(jobs.submit(req));
+    }
+
+    /** Compression choices this machine's ffmpeg can actually deliver. */
+    @GetMapping("/codecs")
+    public List<CodecOption> codecs() {
+        return codecs.options();
+    }
+
+    /**
+     * Whether every video in a playlist offers the same resolutions. Slow on first call
+     * (it reads every item), instant afterwards — the UI shows a spinner on the zip
+     * option while this resolves.
+     */
+    @GetMapping("/playlist/formats")
+    public PlaylistFormats playlistFormats(@RequestParam String url) {
+        try {
+            return ytdlp.playlistFormats(url.trim());
+        } catch (IOException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
     }
 
     @GetMapping("/jobs")

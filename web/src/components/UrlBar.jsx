@@ -6,7 +6,9 @@ export default function UrlBar({ onAnalyze, analyzing }) {
   function submit(e) {
     e.preventDefault()
     const u = url.trim()
-    if (u) onAnalyze(u)
+    if (!u) return
+    onAnalyze(u)
+    setUrl('') // the link now has its own tab — leave the bar ready for the next one
   }
 
   return (

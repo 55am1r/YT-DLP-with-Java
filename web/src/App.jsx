@@ -5,8 +5,9 @@ import PageTabs from './components/PageTabs'
 import MediaPanel from './components/MediaPanel'
 import PlaylistPanel from './components/PlaylistPanel'
 import DownloadsPanel from './components/DownloadsPanel'
+import ConfirmDialog from './components/ConfirmDialog'
 import Login from './components/Login'
-import { analyze, startJob, checkAuth, clearJobs, logout as apiLogout } from './api'
+import { analyze, startJob, checkAuth, clearJobs, getCodecs, logout as apiLogout } from './api'
 
 let seq = 0
 
@@ -16,8 +17,13 @@ export default function App() {
   const [pages, setPages] = useState([])
   const [activeId, setActiveId] = useState(null)
   const [analyzing, setAnalyzing] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [error, setError] = useState(null)
+  const [codecs, setCodecs] = useState([])
+  // Requests the server flagged as already-downloaded, waiting on the user's answer.
+  // A queue, not a single value: picking 10 playlist items can raise 10 at once.
+  const [dupes, setDupes] = useState([])
   const timers = useRef(new Map())
 
   useEffect(() => {
@@ -28,6 +34,10 @@ export default function App() {
   useEffect(() => {
     checkAuth().then(setAuthed).catch(() => setAuthed(false))
   }, [])
+
+  useEffect(() => {
+    if (authed) getCodecs().then(setCodecs).catch(() => setCodecs([]))
+  }, [authed])
 
   useEffect(() => () => timers.current.forEach((t) => t.close()), [])
 
@@ -101,15 +111,58 @@ export default function App() {
     }
   }
 
-  async function onStart(request) {
+  /** Re-read one link's available formats. Only this tab changes. */
+  async function onRefresh() {
+    if (!active) return
     setError(null)
+    setRefreshing(true)
     try {
-      const job = await startJob(request)
-      setPages((prev) => prev.map((p) => (p.id === activeId ? { ...p, jobs: [job, ...p.jobs] } : p)))
-      track(job.id)
+      const analysis = await analyze(active.url)
+      setPages((prev) => prev.map((p) => (p.id === active.id ? { ...p, analysis } : p)))
+    } catch (e) {
+      if (!handleAuthError(e)) setError(e.message || 'Could not refresh the formats')
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  /** Attach a job to a page's list (no duplicate rows) and start polling it. */
+  function adopt(pageId, job) {
+    setPages((prev) =>
+      prev.map((p) => (p.id === pageId && !p.jobs.some((j) => j.id === job.id)
+        ? { ...p, jobs: [job, ...p.jobs] }
+        : p)),
+    )
+    track(job.id)
+  }
+
+  async function onStart(request, force = false) {
+    setError(null)
+    const pageId = activeId
+    try {
+      const res = await startJob(request, force)
+      if (res.duplicate) {
+        setDupes((q) => [...q, { request, job: res.job, pageId }])
+        return
+      }
+      adopt(pageId, res)
     } catch (e) {
       if (!handleAuthError(e)) setError(e.message || 'Could not start the download')
     }
+  }
+
+  /** User chose to download it again anyway. */
+  async function confirmDupe() {
+    const [head, ...rest] = dupes
+    setDupes(rest)
+    await onStart(head.request, true)
+  }
+
+  /** User kept the copy the server already has — show it instead of re-fetching. */
+  function keepExisting() {
+    const [head, ...rest] = dupes
+    setDupes(rest)
+    adopt(head.pageId, head.job)
   }
 
   /** Clear only this link's finished files from the server. */
@@ -154,6 +207,8 @@ export default function App() {
   }
   if (!authed) return <Login onSuccess={() => setAuthed(true)} />
 
+  const dupe = dupes[0]
+
   return (
     <div className="app">
       <div className="container">
@@ -165,14 +220,37 @@ export default function App() {
 
         {active && (
           active.analysis.playlist
-            ? <PlaylistPanel analysis={active.analysis} onStart={onStart} />
-            : <MediaPanel analysis={active.analysis} onStart={onStart} />
+            ? <PlaylistPanel analysis={active.analysis} onStart={onStart} codecs={codecs} />
+            : <MediaPanel
+                analysis={active.analysis}
+                onStart={onStart}
+                codecs={codecs}
+                onRefresh={onRefresh}
+                refreshing={refreshing}
+              />
         )}
 
         {active && (
           <DownloadsPanel jobs={active.jobs} onClear={onClear} onExpired={onExpired} clearing={clearing} />
         )}
       </div>
+
+      {dupe && (
+        <ConfirmDialog
+          title="You already have this one"
+          message={`"${dupe.job.title || dupe.request.title || 'This file'}" was already downloaded with exactly these settings.`}
+          detail={
+            dupe.job.status === 'COMPLETED'
+              ? 'It is still on the server and ready to save — downloading it again costs bandwidth and disk for nothing.'
+              : 'It is downloading right now. Starting a second copy would only slow both down.'
+          }
+          cancelLabel="Use the existing one"
+          confirmLabel="Download again"
+          onCancel={keepExisting}
+          onConfirm={confirmDupe}
+        />
+      )}
+
       <footer className="foot muted">by PredatorFX · for ChaitusMedia Team use</footer>
     </div>
   )
