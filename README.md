@@ -107,8 +107,8 @@ The site shows a login page; the session stays until the browser is fully closed
 (a cookie with no expiry — survives refreshes and server restarts). Change the
 credentials in `server/src/main/resources/application.properties`, then `bash restart.sh`:
 
-    app.auth.username=chiatusteam
-    app.auth.password=Team1234     # change to something strong before sharing widely
+    app.auth.username=your-team-username
+    app.auth.password=your-strong-password   # keep the real one out of git
 
 ---
 

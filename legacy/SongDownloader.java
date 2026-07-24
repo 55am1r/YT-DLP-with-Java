@@ -1,5 +1,7 @@
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
@@ -7,7 +9,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Scanner;
-import java.util.regex.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class SongDownloader {
 
@@ -257,8 +260,7 @@ public class SongDownloader {
                         "--add-metadata", "--postprocessor-args", "ffmpeg_i:-c:v h264_nvenc -preset fast -b:v 6M",
                         "-o",
                         // Adjust your loaction here
-                        System.getProperty("user.home")
-                        + "/Downloads/%(title)s_%(uploader)s.%(ext)s",
+                        "/Volumes/5amServer/Downloads/%(title)s.%(ext)s",
                         userUrl);
 
                 builder.redirectErrorStream(true);

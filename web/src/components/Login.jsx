@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { login } from '../api'
 
 export default function Login({ onSuccess }) {
-  const [username, setUsername] = useState('chiatusteam')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
