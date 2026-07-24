@@ -70,6 +70,17 @@ export async function getYtdlpStatus(refresh = false) {
   return res.json()
 }
 
+/** Clear the server files for one link's downloads only. */
+export async function clearJobs(ids) {
+  const res = await fetch('/api/jobs/clear', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ ids }),
+  })
+  if (!res.ok) throw await toError(res)
+  return res.json()
+}
+
 export async function pauseJob(id) {
   await fetch(`/api/jobs/${id}/pause`, { method: 'POST' })
 }

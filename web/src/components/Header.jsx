@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getYtdlpStatus } from '../api'
 
-export default function Header() {
+export default function Header({ theme, onToggleTheme, onLogout }) {
   const [status, setStatus] = useState(null)
   const [checking, setChecking] = useState(false)
 
@@ -30,7 +30,6 @@ export default function Header() {
   const ver = status?.installed
   const ok = status?.upToDate
   const cls = checking ? 'warn' : ok ? 'ok' : ver ? 'warn' : ''
-  const title = status?.message || 'Click to check for a yt-dlp update'
 
   return (
     <header className="header">
@@ -41,10 +40,27 @@ export default function Header() {
           <p className="muted">Download audio &amp; video from YouTube — for the team</p>
         </div>
       </div>
-      <button className={`badge ${cls}`} onClick={refresh} disabled={checking} title={title}>
-        <span className="dot" />
-        {checking ? 'Checking yt-dlp…' : ver ? `yt-dlp ${ver}${ok ? '' : ' · update ⟳'}` : 'yt-dlp'}
-      </button>
+
+      <div className="header-actions">
+        <button
+          className="icon-btn glass"
+          onClick={onToggleTheme}
+          title={theme === 'light' ? 'Switch to night mode' : 'Switch to day mode'}
+          aria-label="Toggle theme"
+        >
+          {theme === 'light' ? '☾' : '☀'}
+        </button>
+        <button
+          className={`badge glass ${cls}`}
+          onClick={refresh}
+          disabled={checking}
+          title={status?.message || 'Check for a yt-dlp update'}
+        >
+          <span className="dot" />
+          {checking ? 'Checking…' : ver ? `yt-dlp ${ver}` : 'yt-dlp'}
+        </button>
+        <button className="icon-btn glass" onClick={onLogout} title="Log out" aria-label="Log out">⏻</button>
+      </div>
     </header>
   )
 }
