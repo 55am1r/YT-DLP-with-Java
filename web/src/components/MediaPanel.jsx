@@ -65,10 +65,20 @@ export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refre
       <div className={`hero-wrap ${portrait ? 'portrait' : ''}`}>
         {analysis.thumbnail ? (
           <>
-            <img className="hero-bg" src={analysis.thumbnail} alt="" aria-hidden="true" />
+            {/* The blurred fill is unrecognisable anyway — ask for a tiny variant. */}
+            <img
+              className="hero-bg"
+              src={analysis.thumbnail}
+              srcSet={analysis.thumbnailSrcset || undefined}
+              sizes="160px"
+              alt=""
+              aria-hidden="true"
+            />
             <img
               className="hero-img"
               src={analysis.thumbnail}
+              srcSet={analysis.thumbnailSrcset || undefined}
+              sizes={portrait ? '(max-width: 640px) 60vw, 260px' : '(max-width: 640px) 100vw, 64vw'}
               alt=""
               style={portrait && ratio ? { aspectRatio: String(ratio) } : undefined}
             />

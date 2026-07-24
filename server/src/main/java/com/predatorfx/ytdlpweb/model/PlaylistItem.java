@@ -11,5 +11,11 @@ package com.predatorfx.ytdlpweb.model;
  * @param url             the entry's own watch URL, so the UI can probe its formats and
  *                        queue it as its own job with its own quality/container
  */
-public record PlaylistItem(int index, String title, Long durationSeconds, String thumbnail, String url) {
+/**
+ * @param thumbnailSrcset candidate thumbnail sizes as an HTML srcset ("url 320w, …"),
+ *                        so a phone downloads a small image instead of scaling down a
+ *                        1280px one
+ */
+public record PlaylistItem(int index, String title, Long durationSeconds, String thumbnail, String url,
+                           String thumbnailSrcset) {
 }

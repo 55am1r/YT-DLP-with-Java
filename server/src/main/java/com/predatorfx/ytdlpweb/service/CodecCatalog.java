@@ -53,7 +53,7 @@ public class CodecCatalog {
         // Always available — this is the current behaviour: merge, never re-encode.
         add(new Spec(new CodecOption(NONE, "Original",
                 "Keeps the source streams exactly as YouTube sent them",
-                "Best quality", List.of("mp4", "mkv", "webm"), "Full size, zero loss", false),
+                "Best quality", List.of("mp4", "mkv", "webm"), "full size", false),
                 null, List.of(), 1.0));
 
         // Every figure below was MEASURED on real YouTube downloads at 360p and 720p,
@@ -66,19 +66,19 @@ public class CodecCatalog {
         // finishes in minutes rather than hours, and it still sheds a third of the size.
         addIf(encoders, "hevc_videotoolbox", new Spec(new CodecOption("hevc", "H.265 / HEVC",
                 "A third smaller and quick — the Mac's media engine does the encoding",
-                "Recommended", List.of("mp4", "mkv"), "65–90% of original", true),
+                "Recommended", List.of("mp4", "mkv"), "65–90%", true),
                 "hevc_videotoolbox", List.of(), 0.50));
 
         addIf(encoders, "h264_videotoolbox", new Spec(new CodecOption("h264", "H.264 / AVC",
                 "Plays on anything — older phones, TVs, editing suites",
-                null, List.of("mp4", "mkv"), "80–90% of original", true),
+                null, List.of("mp4", "mkv"), "80–90%", true),
                 "h264_videotoolbox", List.of(), 0.70));
 
         // Genuinely the smallest of the lot, but software-encoded: expect a long wait on
         // anything long or high-resolution.
         addIf(encoders, "libsvtav1", new Spec(new CodecOption("av1", "AV1",
                 "Smallest files of all, but slow — it encodes on the CPU, not the media engine",
-                "Best savings", List.of("mp4", "mkv", "webm"), "40–55% of original", false),
+                "Best savings", List.of("mp4", "mkv", "webm"), "40–55%", false),
                 "libsvtav1", List.of("-preset", "6"), 0.40));
 
         // libvpx overshoots a plain bitrate target badly, so it runs in constrained-
@@ -87,7 +87,7 @@ public class CodecCatalog {
         // says so rather than implying a saving that never arrives.
         addIf(encoders, "libvpx-vp9", new Spec(new CodecOption("vp9", "VP9",
                 "For players that need VP9 — does not shrink YouTube sources, and it's slow",
-                null, List.of("mkv", "webm"), "Similar size, sometimes larger", false),
+                null, List.of("mkv", "webm"), "~100%", false),
                 "libvpx-vp9", List.of("-row-mt", "1", "-crf", "33"), 0.55));
 
         log.info("Compression options available: {}", specs.keySet());
