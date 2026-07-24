@@ -6,6 +6,7 @@ import com.predatorfx.ytdlpweb.model.AnalyzeResult;
 import com.predatorfx.ytdlpweb.model.DownloadRequest;
 import com.predatorfx.ytdlpweb.model.Job;
 import com.predatorfx.ytdlpweb.model.JobStatus;
+import com.predatorfx.ytdlpweb.model.PlaylistItem;
 import com.predatorfx.ytdlpweb.model.VideoFormatOption;
 import com.predatorfx.ytdlpweb.util.Processes;
 import org.slf4j.Logger;
@@ -102,10 +103,10 @@ public class YtDlpService {
         String uploader = firstText(root, "uploader", "channel", "playlist_uploader", "uploader_id");
         Long duration = (root.has("duration") && root.get("duration").isNumber()) ? root.get("duration").asLong() : null;
         String thumb = pickThumbnail(root);
-        boolean music = url.contains("music.youtube");
 
         Integer count = null;
         List<VideoFormatOption> formats;
+        List<PlaylistItem> items = List.of();
         if (playlist) {
             if (root.has("playlist_count")) {
                 count = root.get("playlist_count").asInt();
@@ -113,10 +114,17 @@ public class YtDlpService {
                 count = root.get("entries").size();
             }
             formats = standardTiers();
+            items = parseEntries(root);
         } else {
-            formats = parseFormats(root);
+            formats = parseFormats(root); // empty when the source has no video streams
         }
-        return new AnalyzeResult(url, playlist, title, uploader, duration, thumb, music, count, formats);
+
+        // Music sites — and anything with no video streams at all — get audio-only options.
+        boolean music = isMusicUrl(url) || (!playlist && formats.isEmpty());
+        if (formats.isEmpty() && !music) {
+            formats = standardTiers();
+        }
+        return new AnalyzeResult(url, playlist, title, uploader, duration, thumb, music, count, formats, items);
     }
 
     private List<VideoFormatOption> parseFormats(JsonNode root) {
@@ -149,7 +157,36 @@ public class YtDlpService {
             Long size = e.getValue() > 0 ? e.getValue() : null;
             out.add(new VideoFormatOption(h, label(h), noteByHeight.get(h), size));
         }
-        return out.isEmpty() ? standardTiers() : out;
+        return out;
+    }
+
+    /** Playlist entries, so the UI can list items instead of one opaque checkbox. */
+    private List<PlaylistItem> parseEntries(JsonNode root) {
+        JsonNode entries = root.path("entries");
+        if (!entries.isArray()) {
+            return List.of();
+        }
+        List<PlaylistItem> out = new ArrayList<>();
+        int idx = 1;
+        for (JsonNode e : entries) {
+            String id = text(e, "id");
+            String title = firstText(e, "title", "fulltitle");
+            Long dur = (e.has("duration") && e.get("duration").isNumber()) ? e.get("duration").asLong() : null;
+            String thumb = pickThumbnail(e);
+            if (thumb == null && id != null) {
+                thumb = "https://i.ytimg.com/vi/" + id + "/mqdefault.jpg";
+            }
+            out.add(new PlaylistItem(idx, (title == null || title.isBlank()) ? "Item " + idx : title, dur, thumb));
+            idx++;
+        }
+        return out;
+    }
+
+    private static boolean isMusicUrl(String url) {
+        String u = url.toLowerCase();
+        return u.contains("music.youtube.") || u.contains("soundcloud.com")
+                || u.contains("bandcamp.com") || u.contains("music.apple.com")
+                || u.contains("spotify.com");
     }
 
     private List<VideoFormatOption> standardTiers() {
@@ -505,14 +542,20 @@ public class YtDlpService {
         return s.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
     }
 
+    /**
+     * Only the standard landscape heights get a marketing suffix. Vertical/Shorts videos
+     * report odd heights (3840, 1280, 854…) where ">=" ranges produced wrong and duplicated
+     * labels like "1280p (Full HD)" next to "1080p (Full HD)".
+     */
     private static String label(int h) {
-        String base = h + "p";
-        if (h >= 4320) return base + " (8K)";
-        if (h >= 2160) return base + " (4K)";
-        if (h >= 1440) return base + " (2K)";
-        if (h >= 1080) return base + " (Full HD)";
-        if (h >= 720) return base + " (HD)";
-        return base;
+        return switch (h) {
+            case 4320 -> "4320p (8K)";
+            case 2160 -> "2160p (4K)";
+            case 1440 -> "1440p (2K)";
+            case 1080 -> "1080p (Full HD)";
+            case 720 -> "720p (HD)";
+            default -> h + "p";
+        };
     }
 
     private static String text(JsonNode n, String field) {

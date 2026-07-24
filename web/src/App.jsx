@@ -1,27 +1,44 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Header from './components/Header'
 import UrlBar from './components/UrlBar'
+import PageTabs from './components/PageTabs'
 import MediaPanel from './components/MediaPanel'
-import JobCard from './components/JobCard'
+import PlaylistPanel from './components/PlaylistPanel'
+import DownloadsPanel from './components/DownloadsPanel'
 import Login from './components/Login'
-import { analyze, startJob, checkAuth, logout as apiLogout } from './api'
+import { analyze, startJob, checkAuth, clearJobs, logout as apiLogout } from './api'
+
+let seq = 0
 
 export default function App() {
-  const [authed, setAuthed] = useState(null) // null = still checking
-  const [analysis, setAnalysis] = useState(null)
+  const [authed, setAuthed] = useState(null)
+  const [theme, setTheme] = useState(() => localStorage.getItem('ez-theme') || 'dark')
+  const [pages, setPages] = useState([])
+  const [activeId, setActiveId] = useState(null)
   const [analyzing, setAnalyzing] = useState(false)
+  const [clearing, setClearing] = useState(false)
   const [error, setError] = useState(null)
-  const [jobs, setJobs] = useState([])
-  const sources = useRef(new Map())
+  const timers = useRef(new Map())
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem('ez-theme', theme)
+  }, [theme])
 
   useEffect(() => {
     checkAuth().then(setAuthed).catch(() => setAuthed(false))
   }, [])
 
-  // Close all live streams when the app unmounts.
-  useEffect(() => () => sources.current.forEach((es) => es.close()), [])
+  useEffect(() => () => timers.current.forEach((t) => t.close()), [])
 
-  // If the session expired, drop back to the login screen.
+  const active = pages.find((p) => p.id === activeId) || null
+
+  function patchJob(job) {
+    setPages((prev) =>
+      prev.map((p) => ({ ...p, jobs: p.jobs.map((j) => (j.id === job.id ? { ...j, ...job } : j)) })),
+    )
+  }
+
   function handleAuthError(e) {
     if (e && e.status === 401) {
       setAuthed(false)
@@ -30,28 +47,14 @@ export default function App() {
     return false
   }
 
-  async function onAnalyze(url) {
-    setError(null)
-    setAnalyzing(true)
-    setAnalysis(null)
-    try {
-      setAnalysis(await analyze(url))
-    } catch (e) {
-      if (!handleAuthError(e)) setError(e.message || 'Could not analyze that URL')
-    } finally {
-      setAnalyzing(false)
-    }
-  }
-
-  // Poll a job's progress. SSE would be nicer, but it gets buffered by the Cloudflare
-  // tunnel the team uses (progress looks frozen, then jumps to done). Polling is plain
-  // GETs that stream reliably through any proxy — tunnel, Netlify redirect, or direct.
+  // Poll a job until it settles. Polling (not SSE) because the Cloudflare tunnel
+  // buffers event streams — see Frontend notes.
   function track(id) {
-    if (sources.current.has(id)) return
+    if (timers.current.has(id)) return
     let timer = null
     const stop = () => {
       if (timer) clearInterval(timer)
-      sources.current.delete(id)
+      timers.current.delete(id)
     }
     const tick = async () => {
       try {
@@ -61,71 +64,116 @@ export default function App() {
           setAuthed(false)
           return
         }
+        if (res.status === 404) {
+          stop()
+          return
+        }
         if (!res.ok) return
         const job = await res.json()
-        setJobs((prev) => prev.map((j) => (j.id === job.id ? { ...j, ...job } : j)))
-        if (job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELED') {
-          stop()
-        }
+        patchJob(job)
+        if (['COMPLETED', 'FAILED', 'CANCELED'].includes(job.status)) stop()
       } catch {
-        // transient hiccup — keep polling
+        /* transient — keep polling */
       }
     }
     timer = setInterval(tick, 800)
-    sources.current.set(id, { close: stop })
+    timers.current.set(id, { close: stop })
     tick()
+  }
+
+  async function onAnalyze(url) {
+    const existing = pages.find((p) => p.url === url)
+    if (existing) {
+      setActiveId(existing.id)
+      return
+    }
+    setError(null)
+    setAnalyzing(true)
+    try {
+      const analysis = await analyze(url)
+      const page = { id: `p${++seq}`, url, analysis, jobs: [] }
+      setPages((prev) => [...prev, page])
+      setActiveId(page.id)
+    } catch (e) {
+      if (!handleAuthError(e)) setError(e.message || 'Could not analyze that URL')
+    } finally {
+      setAnalyzing(false)
+    }
   }
 
   async function onStart(request) {
     setError(null)
     try {
       const job = await startJob(request)
-      setJobs((prev) => [job, ...prev.filter((j) => j.id !== job.id)])
+      setPages((prev) => prev.map((p) => (p.id === activeId ? { ...p, jobs: [job, ...p.jobs] } : p)))
       track(job.id)
     } catch (e) {
       if (!handleAuthError(e)) setError(e.message || 'Could not start the download')
     }
   }
 
+  /** Clear only this link's finished files from the server. */
+  async function onClear() {
+    if (!active) return
+    const ids = active.jobs.filter((j) => ['COMPLETED', 'FAILED', 'CANCELED'].includes(j.status)).map((j) => j.id)
+    if (ids.length === 0) return
+    setClearing(true)
+    try {
+      await clearJobs(ids)
+      const gone = new Set(ids)
+      setPages((prev) => prev.map((p) => (p.id === active.id ? { ...p, jobs: p.jobs.filter((j) => !gone.has(j.id)) } : p)))
+    } catch (e) {
+      if (!handleAuthError(e)) setError(e.message || 'Could not clear downloads')
+    } finally {
+      setClearing(false)
+    }
+  }
+
+  // The server deleted the file — drop the row so the list matches reality.
+  const onExpired = useCallback((jobId) => {
+    setPages((prev) => prev.map((p) => ({ ...p, jobs: p.jobs.filter((j) => j.id !== jobId) })))
+  }, [])
+
+  function closePage(id) {
+    setPages((prev) => {
+      const next = prev.filter((p) => p.id !== id)
+      if (id === activeId) setActiveId(next.length ? next[next.length - 1].id : null)
+      return next
+    })
+  }
+
   async function onLogout() {
     await apiLogout()
-    setAnalysis(null)
-    setJobs([])
+    setPages([])
+    setActiveId(null)
     setAuthed(false)
   }
 
   if (authed === null) {
-    return (
-      <div className="app">
-        <div className="container loading muted">Loading…</div>
-      </div>
-    )
+    return <div className="app"><div className="container loading muted">Loading…</div></div>
   }
-
-  if (!authed) {
-    return <Login onSuccess={() => setAuthed(true)} />
-  }
+  if (!authed) return <Login onSuccess={() => setAuthed(true)} />
 
   return (
     <div className="app">
       <div className="container">
-        <Header />
+        <Header theme={theme} onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))} onLogout={onLogout} />
         <UrlBar onAnalyze={onAnalyze} analyzing={analyzing} />
         {error && <div className="error">{error}</div>}
-        {analysis && <MediaPanel analysis={analysis} onStart={onStart} />}
-        {jobs.length > 0 && (
-          <section className="jobs">
-            <h2 className="section-title">Downloads</h2>
-            {jobs.map((j) => (
-              <JobCard key={j.id} job={j} />
-            ))}
-          </section>
+
+        <PageTabs pages={pages} activeId={activeId} onSelect={setActiveId} onClose={closePage} />
+
+        {active && (
+          active.analysis.playlist
+            ? <PlaylistPanel analysis={active.analysis} onStart={onStart} />
+            : <MediaPanel analysis={active.analysis} onStart={onStart} />
+        )}
+
+        {active && (
+          <DownloadsPanel jobs={active.jobs} onClear={onClear} onExpired={onExpired} clearing={clearing} />
         )}
       </div>
-      <footer className="foot muted">
-        by PredatorFX · for ChaitusMedia Team use ·{' '}
-        <button className="linklike" onClick={onLogout}>Log out</button>
-      </footer>
+      <footer className="foot muted">by PredatorFX · for ChaitusMedia Team use</footer>
     </div>
   )
 }
