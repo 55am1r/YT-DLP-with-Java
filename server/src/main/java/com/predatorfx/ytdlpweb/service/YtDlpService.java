@@ -25,6 +25,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
@@ -46,6 +47,16 @@ public class YtDlpService {
     private static final Pattern PCT = Pattern.compile("\\[download\\]\\s+(\\d{1,3}(?:\\.\\d+)?)%");
     private static final Pattern ITEM = Pattern.compile("Downloading item (\\d+) of (\\d+)");
     private static final Pattern PL_TITLE = Pattern.compile("Downloading playlist: (.+)");
+    private static final Pattern SPEED = Pattern.compile("at\\s+([0-9.]+\\s*[KMGT]?i?B/s)");
+    private static final Pattern ETA = Pattern.compile("ETA\\s+([0-9:]+)");
+
+    /**
+     * Containers yt-dlp can embed a cover image into. WAV and WEBM cannot — passing
+     * --embed-thumbnail for those aborts the whole job with "Postprocessing: Supported
+     * filetypes for thumbnail embedding are: …".
+     */
+    private static final Set<String> THUMBNAIL_OK = Set.of(
+            "mp3", "mka", "mkv", "ogg", "opus", "flac", "m4a", "mp4", "m4v", "mov");
 
     private static final Set<String> MEDIA_EXT = Set.of(
             "mp3", "m4a", "opus", "ogg", "wav", "flac", "aac",
@@ -168,6 +179,7 @@ public class YtDlpService {
 
         job.setStatus(JobStatus.DOWNLOADING);
         job.setPhase("Starting…");
+        job.setStartedAt(System.currentTimeMillis());
         onUpdate.accept(job);
 
         int[] lastEmitted = {-1};
@@ -210,10 +222,20 @@ public class YtDlpService {
         if (job.getTitle() == null) {
             job.setTitle(stripExt(deliver.getFileName().toString()));
         }
+        // What the finished card shows: real type + resolution, size, and how long it took.
+        job.setContainer(ext(deliver));
+        job.setFileSize(size(deliver));
+        if (!req.isAudio()) {
+            job.setHeight(probeHeight(deliver));
+        }
+        long now = System.currentTimeMillis();
+        job.setFinishedAt(now);
+        job.setElapsedMs(job.getStartedAt() == null ? null : now - job.getStartedAt());
+        job.setSpeed(null);
+        job.setEta(null);
         job.setProgress(100);
         job.setStatus(JobStatus.COMPLETED);
         job.setPhase("Ready to download");
-        job.setFinishedAt(System.currentTimeMillis());
         onUpdate.accept(job);
     }
 
@@ -229,10 +251,22 @@ public class YtDlpService {
             cmd.add(ffmpegBin);
         }
         cmd.add("--concurrent-fragments");
-        cmd.add("4");
+        cmd.add("8");
         cmd.add(req.playlist() ? "--yes-playlist" : "--no-playlist");
         cmd.add("--embed-metadata");
-        cmd.add("--embed-thumbnail");
+        if (THUMBNAIL_OK.contains(req.targetExtension())) {
+            cmd.add("--embed-thumbnail"); // skipped for wav/webm, which can't hold one
+        }
+        if (req.hasItemSelection()) {
+            cmd.add("--playlist-items");
+            cmd.add(req.items().stream().map(String::valueOf).collect(Collectors.joining(",")));
+        }
+        if (req.hasClipRange()) {
+            // Trim to a section, cutting at keyframes so the clip starts cleanly.
+            cmd.add("--download-sections");
+            cmd.add("*" + clipStart(req.startTime()) + "-" + clipEnd(req.endTime()));
+            cmd.add("--force-keyframes-at-cuts");
+        }
 
         String template = req.playlist()
                 ? jobDir.resolve("%(playlist_index)03d - %(title)s.%(ext)s").toString()
@@ -291,6 +325,14 @@ public class YtDlpService {
         if (mp.find()) {
             double pct = Double.parseDouble(mp.group(1));
             job.setStatus(JobStatus.DOWNLOADING);
+            Matcher sp = SPEED.matcher(line);
+            if (sp.find()) {
+                job.setSpeed(sp.group(1).replace(" ", ""));
+            }
+            Matcher et = ETA.matcher(line);
+            if (et.find()) {
+                job.setEta(et.group(1));
+            }
             int emit;
             String phase;
             if (job.getPlaylistCount() != null && job.getPlaylistCount() > 0) {
@@ -418,6 +460,34 @@ public class YtDlpService {
         } catch (IOException e) {
             return 0L;
         }
+    }
+
+    /** Real height of the finished video, so a card can say "1080p" instead of guessing. */
+    private Integer probeHeight(Path file) {
+        try {
+            String ffprobe = (ffmpegBin != null && ffmpegBin.contains("/"))
+                    ? Path.of(ffmpegBin).resolveSibling("ffprobe").toString()
+                    : "ffprobe";
+            Processes.Result r = Processes.run(List.of(ffprobe, "-v", "error",
+                    "-select_streams", "v:0", "-show_entries", "stream=height",
+                    "-of", "csv=p=0", file.toString()), Duration.ofSeconds(20));
+            String s = r.stdout().trim();
+            int nl = s.indexOf('\n');
+            if (nl > 0) {
+                s = s.substring(0, nl).trim();
+            }
+            return s.isEmpty() ? null : Integer.valueOf(s);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static String clipStart(String s) {
+        return (s == null || s.isBlank()) ? "0" : s.trim();
+    }
+
+    private static String clipEnd(String s) {
+        return (s == null || s.isBlank()) ? "inf" : s.trim();
     }
 
     private static String ext(Path p) {

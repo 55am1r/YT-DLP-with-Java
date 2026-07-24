@@ -130,6 +130,23 @@ public class JobService {
         return false;
     }
 
+    /**
+     * Delete server files for a specific set of finished jobs — used by the per-link
+     * "Clear" button, so one link's page can be emptied without touching the others.
+     */
+    public int clear(List<String> ids) {
+        int cleared = 0;
+        for (String id : ids) {
+            Job job = jobs.get(id);
+            if (job == null || !isTerminal(job.getStatus())) {
+                continue; // never yank a download that's still running
+            }
+            deleteJob(id);
+            cleared++;
+        }
+        return cleared;
+    }
+
     public boolean cancel(String id) {
         Job job = jobs.get(id);
         if (job == null || isTerminal(job.getStatus())) {
@@ -160,6 +177,12 @@ public class JobService {
             updates.refreshInBackground();
 
             ytdlp.download(job, this::push);
+
+            // Tell the UI exactly when this file disappears, so it can show a countdown.
+            if (job.getStatus() == JobStatus.COMPLETED && job.getFinishedAt() != null) {
+                job.setExpiresAt(job.getFinishedAt() + Duration.ofMinutes(ttlMinutes).toMillis());
+                push(job);
+            }
         } catch (Exception e) {
             if (job.isCanceled()) {
                 job.setStatus(JobStatus.CANCELED);

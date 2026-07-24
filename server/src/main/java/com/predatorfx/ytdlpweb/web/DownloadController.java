@@ -106,6 +106,15 @@ public class DownloadController {
         return Map.of("ok", jobs.cancel(id));
     }
 
+    public record ClearRequest(List<String> ids) {}
+
+    /** Clear the server files for one link's downloads (not the whole session). */
+    @PostMapping("/jobs/clear")
+    public Map<String, Object> clear(@RequestBody(required = false) ClearRequest body) {
+        int n = (body == null || body.ids() == null) ? 0 : jobs.clear(body.ids());
+        return Map.of("cleared", n);
+    }
+
     /** Stream the finished file to the requester's browser as a download. */
     @GetMapping("/jobs/{id}/file")
     public ResponseEntity<Resource> file(@PathVariable String id) throws IOException {

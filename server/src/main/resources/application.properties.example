@@ -7,6 +7,9 @@ server.address=0.0.0.0
 # --- Never time out long-running downloads / SSE progress streams ---
 spring.mvc.async.request-timeout=-1
 
+# Omitted JSON booleans default to false instead of 400-ing the request.
+spring.jackson.deserialization.fail-on-null-for-primitives=false
+
 # --- Surface ResponseStatusException reasons to the browser for helpful errors ---
 server.error.include-message=always
 
