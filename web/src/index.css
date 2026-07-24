@@ -511,6 +511,12 @@ body {
    Only the outer column changes — everything inside keeps its own responsive rules. */
 @media (max-width: 750px) {
   .container { max-width: none; padding: 18px 12px 22px; }
+
+  /* Theme, update check and log out sat bunched at one end of the row. Spread the
+     gaps evenly across the full width instead — the buttons keep their own size,
+     only the space between them changes. */
+  .header { flex-direction: column; align-items: stretch; gap: 12px; }
+  .header-actions { width: 100%; justify-content: space-evenly; flex-wrap: nowrap; }
 }
 
 /* Tablets and small laptops: the playlist row's controls need the whole width. */
@@ -525,7 +531,7 @@ body {
   .urlbar { flex-direction: column; }
   .urlbar .btn { width: 100%; }
   .header { flex-direction: column; align-items: stretch; gap: 12px; }
-  .header-actions { justify-content: flex-start; flex-wrap: wrap; }
+  /* header-actions spacing is handled by the <=750px rule above. */
 
   /* Thumbnail sits full width above the options rather than as a stamp beside them,
      so it is actually legible and the controls get the whole row. */
