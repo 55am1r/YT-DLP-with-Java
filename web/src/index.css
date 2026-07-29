@@ -79,20 +79,18 @@ body {
   flex: 1;
 }
 
-/* ---------- Liquid glass ---------- */
+/* ---------- Liquid glass ----------
+   Note: containers deliberately do NOT get a :hover state. Panels, job cards, the
+   modal card, playlist rows and the mobile sheet are surfaces to LOOK at, not to
+   click, so lighting up their border and swapping their background as the mouse
+   crosses them was distracting noise. Any glassy element that IS clickable — .btn,
+   .pill, .icon-btn, .icon-round, .tab — carries its own explicit :hover elsewhere. */
 .glass {
   background: var(--glass-bg);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid var(--border-soft);
   box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-edge);
-}
-.glass:hover {
-  background: var(--glass-bg-hover);
-  border-color: var(--glass-edge-hover);
-  -webkit-backdrop-filter: blur(22px) saturate(200%);
-  backdrop-filter: blur(22px) saturate(200%);
-  box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-edge-hover);
 }
 
 /* ---------- Header ---------- */
@@ -145,6 +143,12 @@ body {
   padding: 8px 12px; border-radius: 999px; font-size: 12.5px; cursor: pointer;
 }
 .badge:disabled { opacity: 0.8; cursor: default; }
+/* The yt-dlp version chip is a button — it needs a subtle hover so a click reads
+   as intentional, since the container-level .glass:hover is gone. */
+.badge:hover:not(:disabled) {
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-edge-hover);
+}
 .badge .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .badge.ok .dot { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
 .badge.warn .dot { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
@@ -456,13 +460,15 @@ body {
 .workspace { display: flex; gap: 22px; align-items: flex-start; }
 /* 75/25 split — the download selection is the primary work area, the downloads column
    only needs to fit a compact card. min-width: 0 stops long titles from forcing the
-   column wider than its share. */
+   column wider than its share (a single long job title was ballooning the section
+   right off the right edge because the flex child had no min-width to override). */
 .work-main { flex: 0 0 75%; min-width: 0; }
-.jobs { flex: 0 0 calc(25% - 22px); min-width: 0; }
+.workspace-side { flex: 0 0 calc(25% - 22px); min-width: 0; }
+.jobs { min-width: 0; }
 /* Below this width the two columns stack — downloads under the panel. */
 @media (max-width: 1000px) {
   .workspace { flex-direction: column; }
-  .work-main, .jobs { flex: 1 1 auto; width: 100%; }
+  .work-main, .workspace-side { flex: 1 1 auto; width: 100%; }
 }
 
 /* ---------- Downloads ---------- */
@@ -828,8 +834,8 @@ body {
 .jobs > .job:nth-child(4) { animation-delay: 0.09s; }
 
 /* A little lift on the things you click, on top of the glass hover already defined. */
-.job:not(.job-empty) { transition: transform 0.14s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
-.job:not(.job-empty):hover { transform: translateY(-1px); }
+/* Job cards, playlist rows and the panel body are surfaces, not buttons — no lift on
+   hover. (The action buttons INSIDE them still get their own hover feedback.) */
 .btn-primary { will-change: transform; }
 
 /* The progress bar eases to its new width instead of jumping between poll ticks. */
