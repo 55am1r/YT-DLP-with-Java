@@ -881,19 +881,20 @@ body {
 
 /* Backdrop dims the site behind the sheet and, when tapped, closes it — tapping
    INSIDE the sheet stops the click via JS so it stays open. */
-/* Bumped from 0.18/0.24s to 0.32/0.42s so the motion actually reads to the eye —
-   at the earlier durations the sheet mostly seemed to "appear". Both animations
-   share the same eased curve, and the closing state plays them in reverse so the
-   sheet slides back out to the right when dismissed rather than snapping away. */
+/* Slower still — a phone with a bright screen at arm's length needs generous motion
+   for the slide to register as motion, not a flicker. Backdrop 0.5s, sheet 0.6s in
+   and 0.55s out (fade the backdrop a touch quicker on the way out so the sheet
+   doesn't finish sliding into a dead white void). App-side JS timeout is kept in
+   sync at 620ms so the aside stays mounted until the exit animation completes. */
 .sheet-backdrop {
   position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, 0.42);
   -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
   display: flex; justify-content: flex-end;
-  animation: ez-fade 0.32s ease both;
+  animation: ez-fade 0.5s ease both;
 }
 /* Once the exit animation starts, stop intercepting clicks — even if React doesn't
    unmount for any reason, taps go straight through to the site behind. */
-.sheet-backdrop.closing { animation: ez-fade 0.32s ease reverse both; pointer-events: none; }
+.sheet-backdrop.closing { animation: ez-fade 0.42s ease reverse both; pointer-events: none; }
 @keyframes ez-fade { from { opacity: 0; } to { opacity: 1; } }
 
 .sheet {
@@ -902,10 +903,10 @@ body {
   border-radius: 18px 0 0 18px;
   padding: 14px 14px 20px;
   border: 1px solid var(--border-soft);
-  animation: ez-slide-right 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: ez-slide-right 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
   box-shadow: -18px 0 40px rgba(0, 0, 0, 0.45);
 }
-.sheet.closing { animation: ez-slide-right 0.42s cubic-bezier(0.55, 0, 0.75, 0) reverse both; }
+.sheet.closing { animation: ez-slide-right 0.55s cubic-bezier(0.55, 0, 0.75, 0) reverse both; }
 @keyframes ez-slide-right {
   from { transform: translateX(100%); }
   to   { transform: none; }
@@ -947,10 +948,18 @@ body {
 .dl-btn-confirming .dl-btn-idle { transform: translateY(-120%); opacity: 0; }
 .dl-btn-confirming .dl-btn-done { transform: translateY(0);     opacity: 1; }
 /* Green tint the whole face for the 5-second confirmation window so it isn't just
-   a text swap — a glance across the room reads "started" too. */
-.dl-btn-confirming {
+   a text swap — a glance across the room reads "started" too. The `:hover` and
+   `:active` variants are repeated at matching specificity because mobile browsers
+   keep a tapped button in the :hover state, which would otherwise let the generic
+   .btn:hover rule (specificity 30) override the plain .dl-btn-confirming (10) and
+   paint the button red again after the tap. */
+.dl-btn-confirming,
+.dl-btn-confirming:hover:not(:disabled),
+.dl-btn-confirming:active:not(:disabled),
+.dl-btn-confirming:focus-visible {
   background-image: var(--sheen-primary),
     linear-gradient(160deg, #22c55e 0%, #16a34a 55%, #15803d 100%);
+  border-color: rgba(0, 0, 0, 0.10);
   box-shadow: 0 8px 22px rgba(34, 197, 94, 0.34),
     inset 0 1px 0 rgba(255, 255, 255, 0.45),
     inset 0 -2px 3px rgba(0, 0, 0, 0.18);

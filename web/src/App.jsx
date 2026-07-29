@@ -45,7 +45,8 @@ export default function App() {
   const [error, setError] = useState(null)
   const [codecs, setCodecs] = useState([])
   const [dupes, setDupes] = useState([])       // duplicate-download prompts, one at a time
-  const [closing, setClosing] = useState(null)  // tab pending a close confirmation
+  const [closing, setClosing] = useState(null)   // tab pending a close confirmation
+  const [clearing2, setClearingConfirm] = useState(null) // clear-all pending confirmation
   // Sheet state uses two flags rather than one so we can keep the element mounted
   // through its slide-out animation. Unmount is driven by a setTimeout keyed to the
   // CSS animation duration — earlier this relied on onAnimationEnd, which sometimes
@@ -60,7 +61,8 @@ export default function App() {
   const closeSheet = useCallback(() => {
     clearTimeout(sheetTimer.current)
     setDownloadsSheet((s) => ({ ...s, open: false }))
-    sheetTimer.current = setTimeout(() => setDownloadsSheet({ mounted: false, open: false }), 440)
+    // Matches the .sheet.closing animation duration (0.55s) with a small buffer.
+    sheetTimer.current = setTimeout(() => setDownloadsSheet({ mounted: false, open: false }), 620)
   }, [])
   useEffect(() => () => clearTimeout(sheetTimer.current), [])
   const timers = useRef(new Map())
@@ -198,10 +200,16 @@ export default function App() {
     setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, config } : p)))
   }, [])
 
+  /**
+   * Add a job to its tab and start polling it. Increments `startedTick` on the tab
+   * so the panel's DownloadButton can flash "Download Started!" — this fires only
+   * on a real adoption, so clicks that raise the duplicate-prompt don't play the
+   * animation until (and unless) the user actually confirms Download again.
+   */
   function adopt(pageId, job, request) {
     setPages((prev) =>
       prev.map((p) => (p.id === pageId && !p.jobs.some((j) => j.id === job.id)
-        ? { ...p, jobs: [{ ...job, request }, ...p.jobs] }
+        ? { ...p, jobs: [{ ...job, request }, ...p.jobs], startedTick: (p.startedTick || 0) + 1 }
         : p)),
     )
     track(job.id)
@@ -240,20 +248,30 @@ export default function App() {
     setPages((prev) => prev.map((p) => ({ ...p, jobs: p.jobs.map((j) => (j.id === jobId ? { ...j, saved: true } : j)) })))
   }, [])
 
-  async function onClear() {
-    if (!active) return
-    const ids = active.jobs.filter((j) => TERMINAL.includes(j.status)).map((j) => j.id)
+  /** Do the actual server-side clear, without confirmation. */
+  async function doClear(pageId) {
+    const page = pages.find((p) => p.id === pageId)
+    if (!page) return
+    const ids = page.jobs.filter((j) => TERMINAL.includes(j.status)).map((j) => j.id)
     if (ids.length === 0) return
     setClearing(true)
     try {
       await clearJobs(ids)
       const gone = new Set(ids)
-      setPages((prev) => prev.map((p) => (p.id === active.id ? { ...p, jobs: p.jobs.filter((j) => !gone.has(j.id)) } : p)))
+      setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, jobs: p.jobs.filter((j) => !gone.has(j.id)) } : p)))
     } catch (e) {
       if (!handleAuthError(e)) setError(e.message || 'Could not clear downloads')
     } finally {
       setClearing(false)
     }
+  }
+
+  /** Confirm if any finished file hasn't been saved yet — otherwise clear straight away. */
+  function onClear() {
+    if (!active) return
+    const anyUnsaved = active.jobs.some((j) => j.status === 'COMPLETED' && !j.saved)
+    if (anyUnsaved) setClearingConfirm(active.id)
+    else doClear(active.id)
   }
 
   const onExpired = useCallback((jobId) => {
@@ -326,6 +344,7 @@ export default function App() {
                   onConfig={(c) => saveConfig(active.id, c)}
                   onStart={(req) => onStart(active.id, req)}
                   codecs={codecs}
+                  startedTick={active.startedTick || 0}
                 />
               ) : (
                 <MediaPanel
@@ -337,6 +356,7 @@ export default function App() {
                   codecs={codecs}
                   onRefresh={onRefresh}
                   refreshing={refreshing}
+                  startedTick={active.startedTick || 0}
                 />
               )}
             </div>
@@ -409,6 +429,20 @@ export default function App() {
           confirmLabel="Download again"
           onCancel={keepExisting}
           onConfirm={confirmDupe}
+        />
+      )}
+
+      {clearing2 && (
+        <ConfirmDialog
+          title="Clear these downloads?"
+          message="A finished file hasn’t been saved yet. Clearing discards it."
+          detail="Do you still want to continue?"
+          cancelLabel="Keep them"
+          confirmLabel="Clear anyway"
+          headerIcon="fa-trash-can"
+          confirmIcon="fa-trash-can"
+          onCancel={() => setClearingConfirm(null)}
+          onConfirm={() => { const id = clearing2; setClearingConfirm(null); doClear(id) }}
         />
       )}
 

@@ -10,7 +10,7 @@ const AUDIO_FORMATS = ['mp3', 'm4a', 'opus', 'wav']
  * Single video. Settings are seeded from `config` (the tab's persisted state) and
  * synced back through `onConfig`, so switching tabs or refreshing keeps every choice.
  */
-export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refreshing, config, onConfig }) {
+export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refreshing, config, onConfig, startedTick }) {
   const cfg = config || null
   const audioOnly = analysis.music
   const duration = Math.round(analysis.durationSeconds || 0)
@@ -187,7 +187,7 @@ export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refre
         </div>
       )}
 
-      <DownloadButton onClick={submit}>
+      <DownloadButton onClick={submit} signal={startedTick}>
         Download {isAudio
           ? audioFormat.toUpperCase()
           : `${activeHeight}p · ${format.container.toUpperCase()}${format.codec !== 'none' ? ` · ${format.codec.toUpperCase()}` : ''}`}
