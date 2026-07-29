@@ -70,10 +70,10 @@ body {
    so text lines never get uncomfortably long to scan. */
 .container {
   width: 100%;
-  /* 1400px read as a stretched letterbox on a big monitor — wide and short. Pulled
-     in so the panel keeps a balanced box shape, and no hard floor, so small screens
-     simply use the width they have instead of overflowing. */
-  max-width: clamp(320px, 64vw, 1240px);
+  /* Wider than before to give the side-by-side workspace the room it needs — the
+     downloads column was too cramped at 64vw. Small screens still have no floor,
+     so a phone simply uses the width it has. */
+  max-width: clamp(320px, 78vw, 1520px);
   margin: 0 auto;
   padding: 30px 22px 26px;
   flex: 1;
@@ -110,10 +110,11 @@ body {
 .header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 
 /* Circular, matching the refresh control — theme toggle and log out read as round
-   action buttons rather than boxes with rounded corners. */
+   action buttons. Sized to align with the yt-dlp badge to their left rather than
+   towering over it: same visual weight, icon size unchanged. */
 .icon-btn {
-  width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center;
-  color: var(--text); font-size: 15px; cursor: pointer; padding: 0;
+  width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
+  color: var(--text); font-size: 14px; cursor: pointer; padding: 0;
 }
 .icon-btn:active:not(:disabled) { transform: translateY(1px); }
 
@@ -194,14 +195,18 @@ body {
 :root[data-theme='light'] .error { color: #a3121c; }
 
 /* ---------- Tabs (one per analysed link) ---------- */
-/* A single scrolling strip: tabs never wrap or shrink, and the active one is scrolled
-   fully into view (JS), so you always see what's working and what's next to it. */
+/* Wrapper hosts the strip and its < / > nav buttons in one line. The strip itself
+   still scrolls horizontally when tabs overflow, but the scrollbar is hidden — nav
+   is driven by the arrow buttons instead. */
+.tabs-wrap { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.tabs-nav { flex: 0 0 auto; }
 .tabs {
-  display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px; margin-bottom: 12px;
-  scroll-snap-type: x proximity; scroll-padding-inline: 8px; scrollbar-width: thin;
+  flex: 1 1 auto; min-width: 0;
+  display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px;
+  scroll-snap-type: x proximity; scroll-padding-inline: 8px;
+  scrollbar-width: none; -ms-overflow-style: none;
 }
-.tabs::-webkit-scrollbar { height: 6px; }
-.tabs::-webkit-scrollbar-thumb { background: var(--border-soft); border-radius: 999px; }
+.tabs::-webkit-scrollbar { display: none; }
 .tab {
   display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px 8px 14px;
   border-radius: 12px; cursor: pointer; font-size: 13px; max-width: 240px; flex: 0 0 auto;
@@ -421,8 +426,11 @@ body {
    empty space to its right and top-aligns with the panel (below the search bar). The
    panel's size doesn't change whether downloads are full or empty. */
 .workspace { display: flex; gap: 22px; align-items: flex-start; }
-.work-main { flex: 0 1 560px; min-width: 0; }
-.jobs { flex: 1 1 360px; min-width: 0; }
+/* 75/25 split — the download selection is the primary work area, the downloads column
+   only needs to fit a compact card. min-width: 0 stops long titles from forcing the
+   column wider than its share. */
+.work-main { flex: 0 0 75%; min-width: 0; }
+.jobs { flex: 0 0 calc(25% - 22px); min-width: 0; }
 /* Below this width the two columns stack — downloads under the panel. */
 @media (max-width: 1000px) {
   .workspace { flex-direction: column; }
