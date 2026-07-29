@@ -149,6 +149,10 @@ finishes in minutes rather than hours and the CPU stays free for other jobs.
   by circular `<` / `>` arrow buttons that appear only when the strip overflows and
   fade the tabs beneath them for a smooth transition. On mobile, the strip scrolls
   natively by touch — no arrows.
+- **Mobile downloads sheet.** Below 750px the downloads column moves off-canvas and
+  is opened by a ⋮ button next to Log out; the sheet slides in from the right and
+  closes by tapping the backdrop or the ← in its corner. A red counter on the ⋮
+  shows the current job count.
 - **Responsive across screen sizes.** Below 750px the layout goes full-bleed and
   re-stacks — thumbnails go full width above their controls rather than shrinking
   into stamps — so a phone feels like an app rather than a scaled-down web page.

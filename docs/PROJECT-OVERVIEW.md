@@ -256,8 +256,16 @@ never count as duplicates, since retrying those is the entire point.
   navigated by circular `<` and `>` arrow buttons that appear only when the strip
   overflows; tabs fade under the arrows via a mask gradient so they pass beneath
   smoothly rather than being cut off, and each arrow hides when its end is reached
-  so it never floats over content it can't move to. On mobile, the strip is
-  scrolled natively by touch and the arrows are hidden.
+  so it never floats over content it can't move to. Selecting a tab that sits
+  under the fade scrolls it clear of both the arrow and the fade band, so it lands
+  fully visible. On mobile, the strip is scrolled natively by touch and the arrows
+  are hidden.
+- **Mobile downloads sheet.** Below 750px the downloads column moves off the page
+  and is reached from a ⋮ button placed next to Log out. Tapping it slides an
+  off-canvas panel in from the right, containing the same Downloads section (list,
+  Clear, retry, etc.). It closes by tapping the dimmed backdrop or the ← button in
+  the sheet's top-left corner; taps inside the sheet don't close it. A small red
+  counter on the ⋮ shows how many jobs the active tab currently has.
 - **Responsive.** Below 750px the layout goes full-bleed and re-stacks: thumbnails go
   full width above their controls instead of shrinking into stamps, segmented switches
   span the row, and the header actions group at the right. It reads as an app rather
