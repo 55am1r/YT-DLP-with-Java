@@ -6,6 +6,7 @@ import MediaPanel from './components/MediaPanel'
 import PlaylistPanel from './components/PlaylistPanel'
 import DownloadsPanel from './components/DownloadsPanel'
 import ConfirmDialog from './components/ConfirmDialog'
+import ScrollFab from './components/ScrollFab'
 import Login from './components/Login'
 import { analyze, startJob, checkAuth, clearJobs, getCodecs, logout as apiLogout } from './api'
 
@@ -47,6 +48,7 @@ export default function App() {
   const [dupes, setDupes] = useState([])       // duplicate-download prompts, one at a time
   const [closing, setClosing] = useState(null)   // tab pending a close confirmation
   const [clearing2, setClearingConfirm] = useState(null) // clear-all pending confirmation
+  const [loggingOut, setLoggingOut] = useState(false) // logout pending confirmation
   // Sheet state uses two flags rather than one so we can keep the element mounted
   // through its slide-out animation. Unmount is driven by a setTimeout keyed to the
   // CSS animation duration — earlier this relied on onAnimationEnd, which sometimes
@@ -302,7 +304,8 @@ export default function App() {
     else removePage(id)
   }
 
-  async function onLogout() {
+  /** Actual logout — no confirmation. */
+  async function doLogout() {
     await apiLogout()
     localStorage.removeItem(STORE_KEY)
     timers.current.forEach((t) => t.close())
@@ -310,6 +313,9 @@ export default function App() {
     setActiveId(null)
     setAuthed(false)
   }
+
+  /** Prompt first — logout ends the session (tabs, settings, history all gone). */
+  function onLogout() { setLoggingOut(true) }
 
   if (authed === null) {
     return <div className="app"><div className="container loading muted">Loading…</div></div>
@@ -432,6 +438,34 @@ export default function App() {
         />
       )}
 
+      {loggingOut && (() => {
+        // Logout is always risky — it ends the session (tabs + settings + history
+        // all lost). If anything is also running or unsaved, that's added on top.
+        const running = pages.some((p) => p.jobs.some((j) => ACTIVE.has(j.status)))
+        const unsaved = pages.some((p) => p.jobs.some((j) => j.status === 'COMPLETED' && !j.saved))
+        const message =
+          running && unsaved
+            ? 'A download is still in progress and a finished file hasn’t been saved yet. Logging out cancels the download, discards the file and ends this session.'
+          : running
+            ? 'A download is still in progress. Logging out cancels it and ends this session.'
+          : unsaved
+            ? 'A finished file hasn’t been saved yet. Logging out discards it and ends this session.'
+          :   'Logging out ends this session. Your open tabs and download history will be lost.'
+        return (
+          <ConfirmDialog
+            title="Log out?"
+            message={message}
+            detail="Do you still want to continue?"
+            cancelLabel="Stay logged in"
+            confirmLabel="Log out"
+            headerIcon="fa-right-from-bracket"
+            confirmIcon="fa-right-from-bracket"
+            onCancel={() => setLoggingOut(false)}
+            onConfirm={() => { setLoggingOut(false); doLogout() }}
+          />
+        )
+      })()}
+
       {clearing2 && (
         <ConfirmDialog
           title="Clear these downloads?"
@@ -472,6 +506,10 @@ export default function App() {
           />
         )
       })()}
+
+      {/* Only shown once a link has been analysed and there's actually a panel to
+          scroll through. Hidden on desktop by its .mobile-only class. */}
+      {active && <ScrollFab />}
 
       <footer className="foot muted">by PredatorFX · for ChaitusMedia Team use</footer>
     </div>
