@@ -221,19 +221,18 @@ body {
 }
 
 /* Arrows: pinned to each edge of the strip, floating above it via z-index so the fade
-   shows the tab passing beneath them. The vertical centering is held together by an
-   explicit transform on EVERY state (base / hover / active / disabled) because the
-   general .icon-round:hover rule sets its own translateY, which would otherwise wipe
-   out the -50% centering and make the arrow jump on hover. */
-.tabs-nav {
+   shows the tab passing beneath them. Every arrow state uses .tabs-wrap .tabs-nav to
+   outrank the generic .icon-round:hover rule further down the file — otherwise its
+   translateY(-1px) knocks out the -50% centering and the arrow jumps on hover. */
+.tabs-wrap .tabs-nav {
   position: absolute; top: 50%; transform: translateY(calc(-50% - 5px));
   width: 30px; height: 30px; font-size: 11.5px; z-index: 2;
 }
 .tabs-nav-prev { left: 0; }
 .tabs-nav-next { right: 0; }
-.tabs-nav:hover:not(:disabled),
-.tabs-nav:active:not(:disabled),
-.tabs-nav:disabled {
+.tabs-wrap .tabs-nav:hover:not(:disabled),
+.tabs-wrap .tabs-nav:active:not(:disabled),
+.tabs-wrap .tabs-nav:disabled {
   transform: translateY(calc(-50% - 5px));
 }
 .tab {
@@ -845,4 +844,61 @@ body {
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ---------- Mobile downloads sheet ----------
+   Off-canvas panel that slides in from the right, driven from the header's ⋮ button.
+   Above 750px the button is hidden and the sheet is never rendered — the desktop
+   layout already shows downloads beside the main panel. */
+.mobile-only { display: none; }
+
+/* Small unread indicator on the ⋮ button so a user knows there are downloads waiting. */
+.icon-btn { position: relative; }
+.icon-btn-badge {
+  position: absolute; top: -4px; right: -4px;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 999px; font-size: 10.5px; font-weight: 700; line-height: 16px;
+  color: #fff; background: var(--accent);
+  display: grid; place-items: center;
+}
+
+/* Backdrop dims the site behind the sheet and, when tapped, closes it — tapping
+   INSIDE the sheet stops the click via JS so it stays open. */
+.sheet-backdrop {
+  position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, 0.4);
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  display: flex; justify-content: flex-end;
+  animation: ez-fade 0.18s ease both;
+}
+@keyframes ez-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.sheet {
+  width: min(92vw, 420px); height: 100%;
+  display: flex; flex-direction: column; gap: 12px;
+  border-radius: 18px 0 0 18px;
+  padding: 14px 14px 20px;
+  border: 1px solid var(--border-soft);
+  animation: ez-slide-right 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes ez-slide-right {
+  from { transform: translateX(100%); }
+  to   { transform: none; }
+}
+.sheet-head {
+  display: flex; align-items: center; gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.sheet-title { font-size: 15px; font-weight: 700; }
+.sheet-body { flex: 1 1 auto; overflow-y: auto; }
+/* The DownloadsPanel already ships its own head + Clear button; inside the sheet
+   we drop the top margin so it sits flush under our own header. */
+.sheet-body .dl-head { margin-top: 4px; }
+
+@media (max-width: 750px) {
+  /* The header's ⋮ appears; the desktop downloads column disappears. */
+  .mobile-only { display: grid; }
+  .workspace-side { display: none; }
+  /* Prevent background scroll while the sheet is open. */
+  .app:has(.sheet-backdrop) { overflow: hidden; height: 100vh; }
 }

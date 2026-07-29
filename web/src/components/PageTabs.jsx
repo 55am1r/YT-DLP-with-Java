@@ -34,9 +34,25 @@ export default function PageTabs({ pages, activeId, onSelect, onClose }) {
     }
   }, [measure])
 
-  // Keep the active tab visible when the user picks a different one.
+  // Bring the active tab out from under the mask fade / arrow. scrollIntoView with
+  // inline:'nearest' calls the tab "visible" as soon as one pixel of it is in the
+  // strip's scroll box — but the last ~88px are visually hidden by the mask, so a
+  // tab tucked under the arrow reads as invisible. We compute the scroll ourselves,
+  // reserving the fade band so the tab lands clear of both arrow and fade.
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' })
+    const strip = stripRef.current
+    const tab = activeRef.current
+    if (!strip || !tab) return
+    const FADE = 88   // must match .tabs-fade-* mask width in CSS
+    const stripBox = strip.getBoundingClientRect()
+    const tabBox = tab.getBoundingClientRect()
+    const leftHidden = stripBox.left + FADE - tabBox.left    // how much sticks under the left fade
+    const rightHidden = tabBox.right - (stripBox.right - FADE) // …under the right fade
+    if (leftHidden > 0) {
+      strip.scrollBy({ left: -leftHidden - 4, behavior: 'smooth' })
+    } else if (rightHidden > 0) {
+      strip.scrollBy({ left: rightHidden + 4, behavior: 'smooth' })
+    }
   }, [activeId, pages.length])
 
   function nudge(dir) {
