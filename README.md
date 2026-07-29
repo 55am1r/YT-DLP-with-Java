@@ -109,8 +109,25 @@ finishes in minutes rather than hours and the CPU stays free for other jobs.
   and offered as a choice: reuse the copy already on the server, or download it
   again. This is the main defence against the same 4K video being fetched and stored
   five times by five people.
+- **Retry.** A failed download, or one whose file the server lost on a restart,
+  offers a one-click retry that re-runs with the exact original settings.
+- **Always-visible section.** The Downloads area and its Clear button are shown at all
+  times, with a "no downloads yet" placeholder when empty.
 - **Automatic cleanup.** Finished files carry a visible countdown and are deleted on
   a TTL, so the disk doesn't silently fill.
+
+### Session persistence
+
+- **Survives refresh and reopening.** Analysed tabs, their settings and the download
+  history are saved in the browser and restored on load — a reload never loses your
+  place. A phone that closes and reopens the site comes back to the same state, and
+  the download it left running continues on the server in the meantime.
+- **Refresh safety.** On desktop, refreshing while a download is live prompts a
+  confirmation first; on mobile it simply continues.
+- **Settings stick per tab.** Switching between tabs — or a full refresh — keeps every
+  panel's selections intact, and downloads keep running throughout.
+- **Closing a tab** removes that link's files from the server, confirming first if a
+  download is running or a finished file was never saved.
 
 ### Reliability
 
@@ -124,15 +141,22 @@ finishes in minutes rather than hours and the CPU stays free for other jobs.
 
 ### Interface
 
+- **Two-column workspace.** On a wide screen the downloads sit to the right of the
+  analysed panel and fill the empty space; the panel keeps its size whether downloads
+  are present or not. The columns stack on narrower screens.
+- **Tabs.** Every analysed link is a tab — shown even for a single link — in one
+  horizontally scrolling strip that always keeps the active tab in view.
 - **Responsive across screen sizes.** Below 750px the layout goes full-bleed and
   re-stacks — thumbnails go full width above their controls rather than shrinking
   into stamps — so a phone feels like an app rather than a scaled-down web page.
 - **Responsive images.** Thumbnails ship a `srcset`, so a phone fetches a small
   variant instead of downloading a full-size image to draw it a few hundred pixels
   wide — a meaningful saving across a playlist of twenty.
-- **True-shape thumbnails.** The preview frame takes the image's own aspect ratio and
-  never crops, so vertical Shorts stay vertical and nothing is trimmed off.
-- **Light and dark themes**, each with its own tuned control surfaces.
+- **Clean, true-shape thumbnails.** The preview frame takes the image's own aspect
+  ratio and the image fills it — no black bars, no gradient backdrop, at any aspect
+  including square album art.
+- **Light and dark themes**, each with its own tuned control surfaces, plus restrained
+  entrance and hover motion that respects `prefers-reduced-motion`.
 - **Session login.** Cookie-based auth, credentials kept out of version control.
 
 ---
