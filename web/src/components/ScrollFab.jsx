@@ -1,43 +1,51 @@
 import { useEffect, useState } from 'react'
 
 /**
- * Small-screen jump button. On a phone the analysed panel is tall enough that the
- * Download button is far below the fold — this FAB gives a one-tap way to jump
- * straight to it, and back up again once you're there.
+ * Small-screen jump button that swaps direction based on whether the Download button
+ * is actually on screen. IntersectionObserver watches `.dl-btn`:
  *
- * The icon flips based on scroll position: chevron-down when there's more to see
- * below, chevron-up once you're near the bottom. Hidden entirely above 1000px, since
- * the desktop workspace fits without scrolling.
+ *   button off-screen → chevron-down → tap scrolls to it
+ *   button in-view    → chevron-up   → tap scrolls back to the top
+ *
+ * A MutationObserver picks up when the download button is added / replaced after a
+ * link is (re)analysed, so the observer always tracks the current one.
  */
 export default function ScrollFab() {
-  const [dir, setDir] = useState('down')  // 'down' → scroll to bottom, 'up' → back to top
+  const [dlVisible, setDlVisible] = useState(false)
 
   useEffect(() => {
-    const measure = () => {
-      const scrolled = window.scrollY
-      const max = document.documentElement.scrollHeight - window.innerHeight
-      // Past 60% of the scrollable range → assume the user is looking at the
-      // Download area, so offer to go back up.
-      setDir(max > 0 && scrolled > max * 0.6 ? 'up' : 'down')
+    let io = null
+    let watched = null
+
+    const attach = () => {
+      const el = document.querySelector('.dl-btn')
+      if (el === watched) return
+      if (io) io.disconnect()
+      watched = el
+      if (!el) { setDlVisible(false); return }
+      io = new IntersectionObserver(
+        (entries) => setDlVisible(entries[0].isIntersecting),
+        // Any part of the button showing counts as visible.
+        { root: null, threshold: 0.01 },
+      )
+      io.observe(el)
     }
-    measure()
-    window.addEventListener('scroll', measure, { passive: true })
-    window.addEventListener('resize', measure)
-    return () => {
-      window.removeEventListener('scroll', measure)
-      window.removeEventListener('resize', measure)
-    }
+
+    attach()
+    // Panels re-render on tab switch, refresh, etc., so re-attach when the DOM changes.
+    const mo = new MutationObserver(attach)
+    mo.observe(document.body, { childList: true, subtree: true })
+
+    return () => { if (io) io.disconnect(); mo.disconnect() }
   }, [])
 
   function jump() {
-    if (dir === 'down') {
-      // Prefer scrolling to the actual download button so the user lands where they
-      // need to be, not just at the page bottom (footer/downloads sheet strip).
-      const target = document.querySelector('.dl-btn')
-      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      else window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' })
-    } else {
+    if (dlVisible) {
       window.scrollTo({ top: 0, behavior: 'smooth' })
+    } else {
+      const el = document.querySelector('.dl-btn')
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      else window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' })
     }
   }
 
@@ -45,10 +53,10 @@ export default function ScrollFab() {
     <button
       className="scroll-fab mobile-only"
       onClick={jump}
-      aria-label={dir === 'down' ? 'Jump to download button' : 'Back to top'}
-      title={dir === 'down' ? 'Jump to Download' : 'Back to top'}
+      aria-label={dlVisible ? 'Back to top' : 'Jump to download button'}
+      title={dlVisible ? 'Back to top' : 'Jump to Download'}
     >
-      <i className={`fa-solid ${dir === 'down' ? 'fa-chevron-down' : 'fa-chevron-up'}`} />
+      <i className={`fa-solid ${dlVisible ? 'fa-chevron-up' : 'fa-chevron-down'}`} />
     </button>
   )
 }
