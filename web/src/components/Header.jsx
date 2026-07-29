@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getYtdlpStatus } from '../api'
 
-export default function Header({ theme, onToggleTheme, onLogout }) {
+export default function Header({ theme, onToggleTheme, onLogout, onOpenDownloads, downloadCount }) {
   const [status, setStatus] = useState(null)
   const [checking, setChecking] = useState(false)
 
@@ -63,6 +63,19 @@ export default function Header({ theme, onToggleTheme, onLogout }) {
         <button className="icon-btn glass" onClick={onLogout} title="Log out" aria-label="Log out">
           <i className="fa-solid fa-power-off" />
         </button>
+        {/* Downloads shortcut — mobile only. On desktop the downloads column already
+            sits beside the panel, so there is nothing to open. */}
+        {onOpenDownloads && (
+          <button
+            className="icon-btn glass mobile-only"
+            onClick={onOpenDownloads}
+            title="Show downloads"
+            aria-label="Show downloads"
+          >
+            <i className="fa-solid fa-ellipsis-vertical" />
+            {downloadCount > 0 && <span className="icon-btn-badge">{downloadCount}</span>}
+          </button>
+        )}
       </div>
     </header>
   )

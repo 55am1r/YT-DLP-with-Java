@@ -46,6 +46,7 @@ export default function App() {
   const [codecs, setCodecs] = useState([])
   const [dupes, setDupes] = useState([])       // duplicate-download prompts, one at a time
   const [closing, setClosing] = useState(null)  // tab pending a close confirmation
+  const [downloadsSheet, setDownloadsSheet] = useState(false) // mobile-only slide-in panel
   const timers = useRef(new Map())
 
   useEffect(() => {
@@ -286,7 +287,13 @@ export default function App() {
   return (
     <div className="app">
       <div className="container">
-        <Header theme={theme} onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))} onLogout={onLogout} />
+        <Header
+          theme={theme}
+          onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+          onLogout={onLogout}
+          onOpenDownloads={() => setDownloadsSheet(true)}
+          downloadCount={active ? active.jobs.length : 0}
+        />
         <UrlBar onAnalyze={onAnalyze} analyzing={analyzing} />
         {error && <div className="error">{error}</div>}
 
@@ -317,17 +324,61 @@ export default function App() {
                 />
               )}
             </div>
-            <DownloadsPanel
-              jobs={active.jobs}
-              onClear={onClear}
-              onExpired={onExpired}
-              onRetry={(job) => retry(active.id, job)}
-              onSaved={markSaved}
-              clearing={clearing}
-            />
+            {/* Desktop-only: the downloads column sits beside the main panel. On mobile
+                it is hidden and reached from the header via the sheet below. */}
+            <div className="workspace-side">
+              <DownloadsPanel
+                jobs={active.jobs}
+                onClear={onClear}
+                onExpired={onExpired}
+                onRetry={(job) => retry(active.id, job)}
+                onSaved={markSaved}
+                clearing={clearing}
+              />
+            </div>
           </div>
         )}
       </div>
+
+      {/* Mobile downloads: an off-canvas panel that slides in from the right when the
+          header's ⋮ is tapped. Backdrop tap or the ← button in its corner closes it,
+          and clicking anywhere else inside the sheet keeps it open. */}
+      {downloadsSheet && active && (
+        <div
+          className="sheet-backdrop"
+          onClick={() => setDownloadsSheet(false)}
+          role="presentation"
+        >
+          <aside
+            className="sheet glass"
+            role="dialog"
+            aria-label="Downloads"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sheet-head">
+              <button
+                className="icon-btn glass"
+                onClick={() => setDownloadsSheet(false)}
+                aria-label="Close downloads"
+                title="Close"
+              >
+                <i className="fa-solid fa-arrow-left" />
+              </button>
+              <span className="sheet-title">Downloads</span>
+            </div>
+            <div className="sheet-body">
+              <DownloadsPanel
+                jobs={active.jobs}
+                onClear={onClear}
+                onExpired={onExpired}
+                onRetry={(job) => retry(active.id, job)}
+                onSaved={markSaved}
+                clearing={clearing}
+              />
+            </div>
+          </aside>
+        </div>
+      )}
 
       {dupe && (
         <ConfirmDialog
