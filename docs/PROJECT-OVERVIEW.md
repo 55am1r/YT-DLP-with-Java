@@ -196,9 +196,30 @@ copied through untouched, so nothing is lost that the download already gained.
 - Finished files are pre-fetched in the background when small enough, so **Save file**
   is instant.
 - A live countdown shows how long the file remains on the server.
-- **Clear** removes one link's finished files from the server on demand.
+- **Retry** re-runs a failed job — or one whose file the server lost on a restart —
+  with the exact settings it used the first time.
+- **Clear** removes one link's finished files from the server on demand. The Downloads
+  section and its Clear button are always present, with a "no downloads yet"
+  placeholder card when empty, on every screen size.
 
-### 4.8 Duplicate guard
+### 4.8 Session persistence
+
+- **Survives refresh and reopening.** Analysed tabs, their per-tab settings, and the
+  download history are saved in the browser and restored on load. A reload never loses
+  the user's place, and a phone that closes and reopens the site returns to the same
+  state — the download it left running keeps going on the server, since jobs are
+  server-side.
+- **Refresh safety.** On desktop, a refresh while a download is live raises a native
+  confirmation first. On mobile it just continues, matching how people expect an app
+  to behave.
+- **Settings are per tab.** Each panel's choices are stored on its tab, so switching
+  tabs — or a full page refresh — keeps every selection intact while downloads carry
+  on running.
+- **Closing a tab** deletes that link's files from the server. If a download is still
+  running, or a finished file was never saved, it asks for confirmation first;
+  otherwise it closes cleanly.
+
+### 4.9 Duplicate guard
 
 A request that would produce a byte-identical file to one already downloading or
 finished is intercepted. The user is asked whether to reuse the existing copy or
@@ -210,7 +231,7 @@ from URL, media type, resolution, container, compression, playlist selection and
 range, so genuinely different requests are never blocked. Failed and cancelled jobs
 never count as duplicates, since retrying those is the entire point.
 
-### 4.9 Reliability
+### 4.10 Reliability
 
 - **yt-dlp freshness guard.** The server compares its installed version against the
   latest release and runs `brew upgrade` when behind. An outdated yt-dlp is the single
@@ -224,21 +245,32 @@ never count as duplicates, since retrying those is the entire point.
 - **Robust quality selection.** `bestvideo[height<=N]+bestaudio` with fallbacks, so a
   chosen quality never triggers the "Requested format is not available" retry loop.
 
-### 4.10 Interface
+### 4.11 Interface
 
+- **Two-column workspace.** On a wide screen the analysed panel sits on the left at a
+  comfortable fixed width, and the downloads section fills the empty space to its
+  right, top-aligned below the search bar. The panel's size is unaffected by whether
+  downloads are present. Below 1000px the two columns stack.
+- **Tabs.** Every analysed link becomes a tab — shown even for a single link — in one
+  horizontally scrolling strip that always keeps the active tab fully in view, so the
+  user can see which link is working and what sits either side of it.
 - **Responsive.** Below 750px the layout goes full-bleed and re-stacks: thumbnails go
   full width above their controls instead of shrinking into stamps, segmented switches
-  span the row, and the header actions spread evenly. It reads as an app rather than a
-  scaled-down web page.
+  span the row, and the header actions group at the right. It reads as an app rather
+  than a scaled-down web page.
 - **Responsive images.** Thumbnails ship a `srcset`, so a phone fetches a small
   variant instead of downloading a full-size image to draw it a few hundred pixels
   wide — a real saving across a playlist of twenty.
-- **True-shape thumbnails.** The preview frame takes the image's own aspect ratio and
-  never crops, so vertical Shorts stay vertical and nothing is trimmed off.
+- **Clean, true-shape thumbnails.** The preview frame takes the image's own aspect
+  ratio and the image fills it exactly — no black bars and no gradient backdrop, at any
+  aspect, square album art included.
 - **Light and dark themes**, each with separately tuned control surfaces so neither
   looks washed out.
 - **Liquid-glass design language** — layered specular highlights, lit edges and depth
-  shadows, with distinct hover states for selected and unselected controls.
+  shadows, with distinct hover states for selected and unselected controls, and
+  circular theme and log-out buttons.
+- **Restrained motion** — subtle entrance and hover transitions with an eased progress
+  bar, fully disabled under `prefers-reduced-motion`.
 - **Font Awesome icons** throughout, inheriting theme colour.
 - **Session login.** Cookie-based, surviving refresh and server restart, clearing when
   the browser closes.
