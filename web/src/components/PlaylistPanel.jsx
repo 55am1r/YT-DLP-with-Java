@@ -12,16 +12,24 @@ const AUDIO_FORMATS = ['mp3', 'm4a', 'opus', 'wav']
  *    items that don't share it would silently hand people different files.
  *  - Multi-select   → each ticked item carries its own type, format and quality.
  */
-export default function PlaylistPanel({ analysis, onStart, codecs }) {
+export default function PlaylistPanel({ analysis, onStart, codecs, config, onConfig }) {
+  const cfg = config || null
   const audioOnly = analysis.music
-  const [mode, setMode] = useState(audioOnly ? 'audio' : 'video')
-  const [height, setHeight] = useState(null)
-  const [format, setFormat] = useState(defaultFormat)
-  const [audioFormat, setAudioFormat] = useState('mp3')
-  const [all, setAll] = useState(true)
-  const [selected, setSelected] = useState(() => new Set())
+  const [mode, setMode] = useState(cfg?.mode ?? (audioOnly ? 'audio' : 'video'))
+  const [height, setHeight] = useState(cfg?.height ?? null)
+  const [format, setFormat] = useState(cfg?.format ?? defaultFormat())
+  const [audioFormat, setAudioFormat] = useState(cfg?.audioFormat ?? 'mp3')
+  const [all, setAll] = useState(cfg?.all ?? true)
+  const [selected, setSelected] = useState(() => new Set(cfg?.selected || []))
   const [probes, setProbes] = useState({})
-  const [perItem, setPerItem] = useState({})
+  const [perItem, setPerItem] = useState(cfg?.perItem || {})
+
+  // Sync settings up to the tab so tab-switch and refresh keep them. Probed per-item
+  // quality lists re-fetch on demand, so they aren't persisted.
+  useEffect(() => {
+    onConfig?.({ mode, height, format, audioFormat, all, selected: [...selected], perItem })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, height, format, audioFormat, all, selected, perItem])
 
   // Can this playlist honestly be zipped at one setting? The server reads every item to
   // find out, so the verdict arrives after the page does.
@@ -50,6 +58,14 @@ export default function PlaylistPanel({ analysis, onStart, codecs }) {
         setAll(false)
       })
     return () => { dead = true }
+  }, [analysis.url])
+
+  // A restored tab remembers which items were ticked but not their probed quality lists;
+  // re-probe them once so the per-item quality buttons come back.
+  useEffect(() => {
+    if (!cfg?.selected?.length) return
+    items.filter((it) => selected.has(it.index)).forEach((it) => probe(it))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysis.url])
 
   const commonFormats = uniformity.common || []

@@ -1,58 +1,64 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import TrimSlider from './TrimSlider'
 import FormatPicker, { defaultFormat } from './FormatPicker'
 import { fmtDuration, fmtSize, parseUrlTimestamp } from '../utils'
 
 const AUDIO_FORMATS = ['mp3', 'm4a', 'opus', 'wav']
 
-/** Single video: hero shaped to the video's real aspect, then title/length, then options. */
-export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refreshing }) {
+/**
+ * Single video. Settings are seeded from `config` (the tab's persisted state) and
+ * synced back through `onConfig`, so switching tabs or refreshing keeps every choice.
+ */
+export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refreshing, config, onConfig }) {
+  const cfg = config || null
   const audioOnly = analysis.music
   const duration = Math.round(analysis.durationSeconds || 0)
 
-  // Shorts and phone footage are vertical; forcing them into a wide box cropped the
-  // frame. Shape the hero to the source instead, and letterbox the rest with a
-  // blurred copy of the thumbnail so the panel keeps its width either way.
+  // The video's native aspect. The frame takes this shape so the whole thumbnail shows
+  // at any width, with no black bars and no gradient backdrop — just the image.
   const ratio = analysis.videoWidth && analysis.videoHeight
     ? analysis.videoWidth / analysis.videoHeight
     : null
 
-  // The frame is shaped by the image that actually loaded, not by the video, because
-  // the two don't always agree: YouTube often serves a padded 4:3 thumbnail for a
-  // vertical Short. Matching the image means it fills its frame exactly — nothing
-  // cropped, nothing letterboxed — whatever size the browser picked from the srcset.
+  // The loaded image's own ratio wins over the video's, because YouTube sometimes ships
+  // a padded thumbnail (e.g. 4:3 for a vertical Short); matching the image means it
+  // fills the frame exactly.
   const [imgRatio, setImgRatio] = useState(null)
   const frameRatio = imgRatio || ratio
-  const portrait = frameRatio != null && frameRatio < 1
 
   function measure(e) {
     const { naturalWidth: w, naturalHeight: h } = e.currentTarget
     if (w > 0 && h > 0) setImgRatio(w / h)
   }
 
-  const [mode, setMode] = useState(audioOnly ? 'audio' : 'video')
-  const [height, setHeight] = useState(analysis.videoFormats?.[0]?.height ?? 1080)
-  const [format, setFormat] = useState(defaultFormat)
-  const [audioFormat, setAudioFormat] = useState('mp3')
-  const [trimOn, setTrimOn] = useState(false)
-  const [range, setRange] = useState([0, duration || 1])
+  const [mode, setMode] = useState(cfg?.mode ?? (audioOnly ? 'audio' : 'video'))
+  const [height, setHeight] = useState(cfg?.height ?? (analysis.videoFormats?.[0]?.height ?? 1080))
+  const [format, setFormat] = useState(cfg?.format ?? defaultFormat())
+  const [audioFormat, setAudioFormat] = useState(cfg?.audioFormat ?? 'mp3')
+  const [trimOn, setTrimOn] = useState(cfg?.trimOn ?? false)
+  const [range, setRange] = useState(cfg?.range ?? [0, duration || 1])
 
-  // A pasted link may already carry a start time (?t=90). If so, open the trim
-  // controls pre-set to it instead of making the user re-enter anything.
+  // A pasted link may already carry a start time (?t=90). Open trim pre-set to it — but
+  // only for a fresh tab, never overriding a restored choice.
   const linkStart = parseUrlTimestamp(analysis.url)
   const hasLinkStart = linkStart != null && duration > 0 && linkStart < duration
   const [linkApplied, setLinkApplied] = useState(false)
-  if (hasLinkStart && !linkApplied) {
+  if (!cfg && hasLinkStart && !linkApplied) {
     setLinkApplied(true)
     setTrimOn(true)
     setRange([linkStart, duration])
   }
 
+  // Push the current settings up so the tab remembers them.
+  useEffect(() => {
+    onConfig?.({ mode, height, format, audioFormat, trimOn, range })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, height, format, audioFormat, trimOn, range])
+
   const isAudio = audioOnly || mode === 'audio'
   const [start, end] = range
   const wholeThing = start <= 0 && end >= duration
 
-  // The chosen height may not exist any more after a refresh — fall back to the best.
   const heights = (analysis.videoFormats || []).map((f) => f.height)
   const activeHeight = heights.includes(height) ? height : (heights[0] ?? height)
 
@@ -73,32 +79,17 @@ export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refre
 
   return (
     <section className="panel glass">
-      {/* The frame takes the video's own shape, so the whole thumbnail is visible at
-          any width; CSS only caps how tall it may get. */}
-      <div
-        className={`hero-wrap ${portrait ? 'portrait' : ''}`}
-        style={frameRatio ? { '--ar': String(frameRatio) } : undefined}
-      >
+      {/* Frame is the thumbnail's own shape — no backdrop, no bars. */}
+      <div className="hero-wrap" style={frameRatio ? { '--ar': String(frameRatio) } : undefined}>
         {analysis.thumbnail ? (
-          <>
-            {/* The blurred fill is unrecognisable anyway — ask for a tiny variant. */}
-            <img
-              className="hero-bg"
-              src={analysis.thumbnail}
-              srcSet={analysis.thumbnailSrcset || undefined}
-              sizes="160px"
-              alt=""
-              aria-hidden="true"
-            />
-            <img
-              className="hero-img"
-              src={analysis.thumbnail}
-              srcSet={analysis.thumbnailSrcset || undefined}
-              sizes={portrait ? '(max-width: 640px) 60vw, 300px' : '(max-width: 640px) 100vw, 64vw'}
-              alt=""
-              onLoad={measure}
-            />
-          </>
+          <img
+            className="hero-img"
+            src={analysis.thumbnail}
+            srcSet={analysis.thumbnailSrcset || undefined}
+            sizes="(max-width: 750px) 100vw, 560px"
+            alt=""
+            onLoad={measure}
+          />
         ) : (
           <div className="hero-empty"><i className="fa-solid fa-music" /></div>
         )}
@@ -125,8 +116,6 @@ export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refre
             </button>
           </div>
         )}
-        {/* Re-reads this one link's options from the server. Nothing else on the page
-            reloads — other tabs and their downloads carry on untouched. */}
         <button
           className={`icon-round ${refreshing ? 'spinning' : ''}`}
           onClick={onRefresh}

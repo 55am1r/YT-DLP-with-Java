@@ -25,7 +25,7 @@ const ACTIVE = new Set(['QUEUED', 'CHECKING_UPDATES', 'ANALYZING', 'DOWNLOADING'
 // so a multi-GB 4K download can't blow up the tab's memory.
 const PREFETCH_LIMIT = 200 * 1024 * 1024
 
-export default function JobCard({ job, onExpired }) {
+export default function JobCard({ job, onExpired, onRetry, onSaved }) {
   const [blobUrl, setBlobUrl] = useState(null)
   const [left, setLeft] = useState(null)
 
@@ -114,8 +114,20 @@ export default function JobCard({ job, onExpired }) {
               <i className="fa-solid fa-xmark" /> Cancel
             </button>
           )}
+          {/* Re-run with the exact same settings — for a failed job, or one whose file
+              the server lost on a restart. */}
+          {bad && job.request && onRetry && (
+            <button className="btn btn-sm" onClick={() => onRetry(job)}>
+              <i className="fa-solid fa-rotate-right" /> Retry
+            </button>
+          )}
           {done && (
-            <a className="btn btn-primary btn-sm" href={blobUrl || fileUrl(job.id)} download={job.fileName || true}>
+            <a
+              className="btn btn-primary btn-sm"
+              href={blobUrl || fileUrl(job.id)}
+              download={job.fileName || true}
+              onClick={() => onSaved && onSaved(job.id)}
+            >
               <i className="fa-solid fa-download" /> Save file{blobUrl ? ' (ready)' : ''}
             </a>
           )}
