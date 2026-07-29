@@ -221,19 +221,21 @@ body {
 }
 
 /* Arrows: pinned to each edge of the strip, floating above it via z-index so the fade
-   shows the tab passing beneath them. Centering uses top+translate for the vertical
-   position; a --lift custom prop is added by :hover instead of overwriting the whole
-   transform, so the arrow lifts slightly WITHOUT losing its centering. */
+   shows the tab passing beneath them. The vertical centering is held together by an
+   explicit transform on EVERY state (base / hover / active / disabled) because the
+   general .icon-round:hover rule sets its own translateY, which would otherwise wipe
+   out the -50% centering and make the arrow jump on hover. */
 .tabs-nav {
-  position: absolute; top: 50%;
-  --lift: 0px;
-  transform: translateY(calc(-50% - 5px + var(--lift)));
+  position: absolute; top: 50%; transform: translateY(calc(-50% - 5px));
   width: 30px; height: 30px; font-size: 11.5px; z-index: 2;
 }
 .tabs-nav-prev { left: 0; }
 .tabs-nav-next { right: 0; }
-.tabs-nav:hover:not(:disabled) { --lift: -1px; }
-.tabs-nav:active:not(:disabled) { --lift: 1px; }
+.tabs-nav:hover:not(:disabled),
+.tabs-nav:active:not(:disabled),
+.tabs-nav:disabled {
+  transform: translateY(calc(-50% - 5px));
+}
 .tab {
   display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px 8px 14px;
   border-radius: 12px; cursor: pointer; font-size: 13px; max-width: 240px; flex: 0 0 auto;
@@ -585,6 +587,13 @@ body {
      across the width. */
   .header { flex-direction: column; align-items: stretch; gap: 12px; }
   .header-actions { width: 100%; justify-content: flex-end; flex-wrap: nowrap; }
+
+  /* Native touch scroll on phones — the < / > arrows and the edge fade are a
+     desktop-only affordance. Overriding the mask so it doesn't clip tab titles. */
+  .tabs-nav { display: none; }
+  .tabs-fade-left, .tabs-fade-right, .tabs-fade-left.tabs-fade-right {
+    -webkit-mask-image: none; mask-image: none;
+  }
 }
 
 /* Tablets and small laptops: the playlist row's controls need the whole width. */
