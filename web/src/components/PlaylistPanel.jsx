@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { analyze, getPlaylistFormats } from '../api'
 import FormatPicker, { defaultFormat } from './FormatPicker'
+import DownloadButton from './DownloadButton'
 import { fmtDuration } from '../utils'
 
 const AUDIO_FORMATS = ['mp3', 'm4a', 'opus', 'wav']
@@ -366,14 +367,12 @@ export default function PlaylistPanel({ analysis, onStart, codecs, config, onCon
         </>
       )}
 
-      <button
-        className="btn btn-primary btn-lg"
+      <DownloadButton
         onClick={submit}
         disabled={uniformity.loading || (!zipMode && chosen.length === 0) || (zipMode && !sharedAudio && !height)}
       >
-        <i className="fa-solid fa-download" />
         {zipMode ? `Download all ${count} · ${sharedLabel}` : `Download ${chosen.length || ''} selected`}
-      </button>
+      </DownloadButton>
     </section>
   )
 }

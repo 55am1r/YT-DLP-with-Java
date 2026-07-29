@@ -1,35 +1,69 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getYtdlpStatus } from '../api'
+
+const JUST_UPDATED_MS = 6000
 
 export default function Header({ theme, onToggleTheme, onLogout, onOpenDownloads, downloadCount }) {
   const [status, setStatus] = useState(null)
   const [checking, setChecking] = useState(false)
+  // Show "Updated!" briefly after a refresh actually bumps the installed version, so
+  // a manual click on the badge has visible feedback.
+  const [justUpdated, setJustUpdated] = useState(false)
+  const prevVersion = useRef(null)
+  const clearTimer = useRef(null)
 
   useEffect(() => {
     let alive = true
     const load = () => getYtdlpStatus().then((s) => alive && setStatus(s)).catch(() => {})
     load()
     const t = setInterval(load, 10000)
-    return () => {
-      alive = false
-      clearInterval(t)
-    }
+    return () => { alive = false; clearInterval(t); clearTimeout(clearTimer.current) }
   }, [])
 
   async function refresh() {
     setChecking(true)
+    const before = status?.installed
     try {
-      setStatus(await getYtdlpStatus(true))
-    } catch {
-      /* ignore */
-    } finally {
-      setChecking(false)
-    }
+      const next = await getYtdlpStatus(true)
+      setStatus(next)
+      if (before && next?.installed && next.installed !== before) {
+        setJustUpdated(true)
+        clearTimeout(clearTimer.current)
+        clearTimer.current = setTimeout(() => setJustUpdated(false), JUST_UPDATED_MS)
+      }
+    } catch { /* ignore */ }
+    finally { setChecking(false) }
   }
+
+  // Track the version quietly so a background poll that catches an update also
+  // triggers the "Updated!" flash, not just a manual click.
+  useEffect(() => {
+    const v = status?.installed
+    if (v && prevVersion.current && prevVersion.current !== v) {
+      setJustUpdated(true)
+      clearTimeout(clearTimer.current)
+      clearTimer.current = setTimeout(() => setJustUpdated(false), JUST_UPDATED_MS)
+    }
+    if (v) prevVersion.current = v
+  }, [status?.installed])
 
   const ver = status?.installed
   const ok = status?.upToDate
-  const cls = checking ? 'warn' : ok ? 'ok' : ver ? 'warn' : ''
+  // Four possible messages, mutually exclusive and prioritised in this order.
+  const label =
+    checking       ? 'Checking for an update…'
+    : justUpdated  ? 'Updated!'
+    : ok           ? 'Up-to-date'
+    : ver          ? 'Update available'
+    :                'Checking…'
+  const cls =
+    checking       ? 'warn'
+    : justUpdated  ? 'ok'
+    : ok           ? 'ok'
+    : ver          ? 'warn'
+    :                ''
+  const tooltip = status?.message
+    || (ver ? `yt-dlp ${ver}${ok ? ' — latest' : ' — click to update'}` : 'Check for a yt-dlp update')
 
   return (
     <header className="header">
@@ -47,10 +81,10 @@ export default function Header({ theme, onToggleTheme, onLogout, onOpenDownloads
           className={`badge glass ${cls}`}
           onClick={refresh}
           disabled={checking}
-          title={status?.message || 'Check for a yt-dlp update'}
+          title={tooltip}
         >
           <span className="dot" />
-          {checking ? 'Checking…' : ver ? `yt-dlp ${ver}` : 'yt-dlp'}
+          {label}
         </button>
         <button
           className="icon-btn glass"
