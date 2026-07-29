@@ -47,12 +47,22 @@ export default function App() {
   const [dupes, setDupes] = useState([])       // duplicate-download prompts, one at a time
   const [closing, setClosing] = useState(null)  // tab pending a close confirmation
   // Sheet state uses two flags rather than one so we can keep the element mounted
-  // through its slide-out animation. openSheet() sets both true; closeSheet() drops
-  // `open` — a class flip triggers the exit keyframe, and after it finishes the
-  // aside unmounts. Kept in App-level state so it survives tab-switches.
+  // through its slide-out animation. Unmount is driven by a setTimeout keyed to the
+  // CSS animation duration — earlier this relied on onAnimationEnd, which sometimes
+  // never fired if the user tapped close while the open animation was still running,
+  // leaving an invisible backdrop stuck in the DOM that blocked every click.
   const [downloadsSheet, setDownloadsSheet] = useState({ mounted: false, open: false })
-  const openSheet = useCallback(() => setDownloadsSheet({ mounted: true, open: true }), [])
-  const closeSheet = useCallback(() => setDownloadsSheet((s) => ({ ...s, open: false })), [])
+  const sheetTimer = useRef(null)
+  const openSheet = useCallback(() => {
+    clearTimeout(sheetTimer.current)
+    setDownloadsSheet({ mounted: true, open: true })
+  }, [])
+  const closeSheet = useCallback(() => {
+    clearTimeout(sheetTimer.current)
+    setDownloadsSheet((s) => ({ ...s, open: false }))
+    sheetTimer.current = setTimeout(() => setDownloadsSheet({ mounted: false, open: false }), 440)
+  }, [])
+  useEffect(() => () => clearTimeout(sheetTimer.current), [])
   const timers = useRef(new Map())
 
   useEffect(() => {
@@ -348,18 +358,13 @@ export default function App() {
 
       {/* Mobile downloads: an off-canvas panel that slides in from the right when the
           header's ⋮ is tapped. Backdrop tap or the ← button in its corner closes it,
-          taps inside the sheet keep it open. The `closing` class triggers the exit
-          animation; onAnimationEnd unmounts after the slide-out completes so the user
-          actually sees it leave rather than the sheet just vanishing. */}
+          taps inside the sheet keep it open. Unmount is driven by the timeout in
+          closeSheet so the exit animation reliably finishes even if the open animation
+          hadn't. */}
       {downloadsSheet.mounted && active && (
         <div
           className={`sheet-backdrop ${downloadsSheet.open ? '' : 'closing'}`}
           onClick={closeSheet}
-          onAnimationEnd={(e) => {
-            if (!downloadsSheet.open && e.target === e.currentTarget) {
-              setDownloadsSheet({ mounted: false, open: false })
-            }
-          }}
           role="presentation"
         >
           <aside
@@ -407,19 +412,32 @@ export default function App() {
         />
       )}
 
-      {closing && (
-        <ConfirmDialog
-          title="Close this tab?"
-          message="Closing it removes this link's files from the server."
-          detail="A download is still running or a finished file hasn't been saved yet — it will be lost."
-          cancelLabel="Keep the tab"
-          confirmLabel="Close and delete"
-          headerIcon="fa-trash-can"
-          confirmIcon="fa-trash-can"
-          onCancel={() => setClosing(null)}
-          onConfirm={() => { const id = closing; setClosing(null); removePage(id) }}
-        />
-      )}
+      {closing && (() => {
+        // The tab about to close — pick the right message for whichever
+        // conditions actually apply to its jobs.
+        const page = pages.find((p) => p.id === closing)
+        const anyRunning = !!page?.jobs.some((j) => ACTIVE.has(j.status))
+        const anyUnsaved = !!page?.jobs.some((j) => j.status === 'COMPLETED' && !j.saved)
+        const message =
+          anyRunning && anyUnsaved
+            ? 'A download is still in progress and a finished file hasn’t been saved yet. Closing this tab cancels the download and discards the file.'
+          : anyRunning
+            ? 'A download is still in progress. Closing this tab cancels it.'
+          :   'A finished file hasn’t been saved yet. Closing this tab discards it.'
+        return (
+          <ConfirmDialog
+            title="Close this tab?"
+            message={message}
+            detail="Do you still want to continue?"
+            cancelLabel="Keep the tab"
+            confirmLabel="Close and delete"
+            headerIcon="fa-trash-can"
+            confirmIcon="fa-trash-can"
+            onCancel={() => setClosing(null)}
+            onConfirm={() => { const id = closing; setClosing(null); removePage(id) }}
+          />
+        )
+      })()}
 
       <footer className="foot muted">by PredatorFX · for ChaitusMedia Team use</footer>
     </div>

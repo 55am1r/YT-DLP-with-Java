@@ -891,7 +891,9 @@ body {
   display: flex; justify-content: flex-end;
   animation: ez-fade 0.32s ease both;
 }
-.sheet-backdrop.closing { animation: ez-fade 0.32s ease reverse both; }
+/* Once the exit animation starts, stop intercepting clicks — even if React doesn't
+   unmount for any reason, taps go straight through to the site behind. */
+.sheet-backdrop.closing { animation: ez-fade 0.32s ease reverse both; pointer-events: none; }
 @keyframes ez-fade { from { opacity: 0; } to { opacity: 1; } }
 
 .sheet {
