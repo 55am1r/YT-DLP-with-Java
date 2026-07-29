@@ -882,20 +882,21 @@ body {
 /* Backdrop dims the site behind the sheet and, when tapped, closes it — tapping
    INSIDE the sheet stops the click via JS so it stays open. */
 /* Slower still — a phone with a bright screen at arm's length needs generous motion
-   for the slide to register as motion, not a flicker. Backdrop 0.5s, sheet 0.6s in
-   and 0.55s out (fade the backdrop a touch quicker on the way out so the sheet
-   doesn't finish sliding into a dead white void). App-side JS timeout is kept in
-   sync at 620ms so the aside stays mounted until the exit animation completes. */
+   for the slide to register as motion, not a flicker. Enter and exit use DIFFERENT
+   keyframe names so the browser is forced to restart the animation when React swaps
+   the class; keeping the same @keyframes name with a different direction produced
+   no visible exit motion because the browser considered it the same animation. */
 .sheet-backdrop {
   position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, 0.42);
   -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
   display: flex; justify-content: flex-end;
-  animation: ez-fade 0.5s ease both;
+  animation: ez-fade-in 0.5s ease both;
 }
 /* Once the exit animation starts, stop intercepting clicks — even if React doesn't
    unmount for any reason, taps go straight through to the site behind. */
-.sheet-backdrop.closing { animation: ez-fade 0.42s ease reverse both; pointer-events: none; }
-@keyframes ez-fade { from { opacity: 0; } to { opacity: 1; } }
+.sheet-backdrop.closing { animation: ez-fade-out 0.5s ease both; pointer-events: none; }
+@keyframes ez-fade-in  { from { opacity: 0; } to   { opacity: 1; } }
+@keyframes ez-fade-out { from { opacity: 1; } to   { opacity: 0; } }
 
 .sheet {
   width: min(92vw, 420px); height: 100%;
@@ -903,14 +904,12 @@ body {
   border-radius: 18px 0 0 18px;
   padding: 14px 14px 20px;
   border: 1px solid var(--border-soft);
-  animation: ez-slide-right 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: ez-slide-in-right 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
   box-shadow: -18px 0 40px rgba(0, 0, 0, 0.45);
 }
-.sheet.closing { animation: ez-slide-right 0.55s cubic-bezier(0.55, 0, 0.75, 0) reverse both; }
-@keyframes ez-slide-right {
-  from { transform: translateX(100%); }
-  to   { transform: none; }
-}
+.sheet.closing { animation: ez-slide-out-right 0.55s cubic-bezier(0.55, 0, 0.75, 0) both; }
+@keyframes ez-slide-in-right  { from { transform: translateX(100%); } to { transform: none; } }
+@keyframes ez-slide-out-right { from { transform: none; } to { transform: translateX(100%); } }
 .sheet-head {
   display: flex; align-items: center; gap: 10px;
   padding-bottom: 8px;
