@@ -205,30 +205,35 @@ body {
 }
 .tabs::-webkit-scrollbar { display: none; }
 
-/* Fade the last ~44px on whichever side has more tabs off-screen, so a tab passes
-   smoothly under the arrow instead of being cut. */
+/* Wider fade zone so the arrow reads as a clearly separate control with breathing
+   room, not as something crammed against the last visible tab. */
 .tabs-fade-left {
-  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 44px);
-          mask-image: linear-gradient(to right, transparent 0, #000 44px);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 88px);
+          mask-image: linear-gradient(to right, transparent 0, #000 88px);
 }
 .tabs-fade-right {
-  -webkit-mask-image: linear-gradient(to left, transparent 0, #000 44px);
-          mask-image: linear-gradient(to left, transparent 0, #000 44px);
+  -webkit-mask-image: linear-gradient(to left, transparent 0, #000 88px);
+          mask-image: linear-gradient(to left, transparent 0, #000 88px);
 }
 .tabs-fade-left.tabs-fade-right {
-  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 44px, #000 calc(100% - 44px), transparent 100%);
-          mask-image: linear-gradient(to right, transparent 0, #000 44px, #000 calc(100% - 44px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 88px, #000 calc(100% - 88px), transparent 100%);
+          mask-image: linear-gradient(to right, transparent 0, #000 88px, #000 calc(100% - 88px), transparent 100%);
 }
 
-/* Arrow buttons: sized to the tabs (~32px, matching tab height), pinned to each edge
-   of the strip, floating above it via z-index so the fade shows the tab passing
-   beneath them. */
+/* Arrows: pinned to each edge of the strip, floating above it via z-index so the fade
+   shows the tab passing beneath them. Centering uses top+translate for the vertical
+   position; a --lift custom prop is added by :hover instead of overwriting the whole
+   transform, so the arrow lifts slightly WITHOUT losing its centering. */
 .tabs-nav {
-  position: absolute; top: 50%; transform: translateY(calc(-50% - 5px));
+  position: absolute; top: 50%;
+  --lift: 0px;
+  transform: translateY(calc(-50% - 5px + var(--lift)));
   width: 30px; height: 30px; font-size: 11.5px; z-index: 2;
 }
-.tabs-nav-prev { left: -4px; }
-.tabs-nav-next { right: -4px; }
+.tabs-nav-prev { left: 0; }
+.tabs-nav-next { right: 0; }
+.tabs-nav:hover:not(:disabled) { --lift: -1px; }
+.tabs-nav:active:not(:disabled) { --lift: 1px; }
 .tab {
   display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px 8px 14px;
   border-radius: 12px; cursor: pointer; font-size: 13px; max-width: 240px; flex: 0 0 auto;

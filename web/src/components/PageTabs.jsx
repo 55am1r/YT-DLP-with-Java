@@ -51,11 +51,13 @@ export default function PageTabs({ pages, activeId, onSelect, onClose }) {
 
   return (
     <div className="tabs-wrap">
-      {nav.overflow && (
+      {/* Each arrow shows only when there IS content to scroll to on that side —
+          a disabled arrow at an end looked like the close-X button of the last
+          tab bleeding through the semi-transparent chevron. */}
+      {nav.overflow && !nav.atStart && (
         <button
           className="icon-round tabs-nav tabs-nav-prev"
           onClick={() => nudge(-1)}
-          disabled={nav.atStart}
           aria-label="Scroll tabs left"
           title="Previous tabs"
         >
@@ -96,11 +98,10 @@ export default function PageTabs({ pages, activeId, onSelect, onClose }) {
         })}
       </div>
 
-      {nav.overflow && (
+      {nav.overflow && !nav.atEnd && (
         <button
           className="icon-round tabs-nav tabs-nav-next"
           onClick={() => nudge(1)}
-          disabled={nav.atEnd}
           aria-label="Scroll tabs right"
           title="More tabs"
         >
