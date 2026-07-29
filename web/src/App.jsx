@@ -401,6 +401,8 @@ export default function App() {
           detail="A download is still running or a finished file hasn't been saved yet — it will be lost."
           cancelLabel="Keep the tab"
           confirmLabel="Close and delete"
+          headerIcon="fa-trash-can"
+          confirmIcon="fa-trash-can"
           onCancel={() => setClosing(null)}
           onConfirm={() => { const id = closing; setClosing(null); removePage(id) }}
         />
