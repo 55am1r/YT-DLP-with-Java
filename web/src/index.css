@@ -963,3 +963,33 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.45),
     inset 0 -2px 3px rgba(0, 0, 0, 0.18);
 }
+
+/* ---------- Scroll-to-download FAB ----------
+   Small screens only: on desktop the whole workspace fits without scrolling, so
+   there's nothing to jump to. Positioned bottom-right, above the OS home indicator
+   via env(safe-area-inset-bottom). */
+.scroll-fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  width: 46px; height: 46px; border-radius: 50%;
+  display: grid; place-items: center;
+  color: #fff; font-size: 16px; cursor: pointer;
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  background-image: var(--sheen-primary), var(--primary-face);
+  box-shadow: 0 8px 22px rgba(193, 18, 30, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.20);
+  z-index: 30;
+  transition: transform 0.14s ease, filter 0.18s ease;
+}
+.scroll-fab:active:not(:disabled) { transform: translateY(1px); }
+
+/* ---------- Narrower downloads sheet on phones only ----------
+   Tablet-mode sheet (750-1000px) already looks right at min(92vw, 420px); phones
+   were letting the sheet swallow almost the whole screen (92vw), which was more
+   than the compact content actually needed. Below 750px, take ~70% of the width
+   so a slice of the site behind it stays visible for context. */
+@media (max-width: 750px) {
+  .sheet { width: min(70vw, 320px); }
+}
