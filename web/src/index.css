@@ -465,10 +465,14 @@ body {
 .work-main { flex: 0 0 75%; min-width: 0; }
 .workspace-side { flex: 0 0 calc(25% - 22px); min-width: 0; }
 .jobs { min-width: 0; }
-/* Below this width the two columns stack — downloads under the panel. */
+/* Below this width there isn't enough room for two comfortable columns — the
+   downloads column was either squeezed to nothing or stacked below with acres of
+   empty space next to it. Instead the side column is hidden entirely (see the
+   mobile-sheet rules further down) and the ⋮ button in the header opens the same
+   downloads content in an off-canvas sheet. .work-main takes the whole row. */
 @media (max-width: 1000px) {
   .workspace { flex-direction: column; }
-  .work-main, .workspace-side { flex: 1 1 auto; width: 100%; }
+  .work-main { flex: 1 1 auto; width: 100%; }
 }
 
 /* ---------- Downloads ---------- */
@@ -852,10 +856,11 @@ body {
   }
 }
 
-/* ---------- Mobile downloads sheet ----------
-   Off-canvas panel that slides in from the right, driven from the header's ⋮ button.
-   Above 750px the button is hidden and the sheet is never rendered — the desktop
-   layout already shows downloads beside the main panel. */
+/* ---------- Off-canvas downloads sheet ----------
+   Slides in from the right when the header's ⋮ button is tapped. Kicks in at any
+   width where the side-by-side workspace would be uncomfortable (≤1000px), which
+   covers phones and small-to-medium tablets. Above 1000px there's enough room for
+   the downloads column beside the main panel, so the button is hidden. */
 .mobile-only { display: none; }
 
 /* Small unread indicator on the ⋮ button so a user knows there are downloads waiting. */
@@ -901,7 +906,7 @@ body {
    we drop the top margin so it sits flush under our own header. */
 .sheet-body .dl-head { margin-top: 4px; }
 
-@media (max-width: 750px) {
+@media (max-width: 1000px) {
   /* The header's ⋮ appears; the desktop downloads column disappears. */
   .mobile-only { display: grid; }
   .workspace-side { display: none; }
