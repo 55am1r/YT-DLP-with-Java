@@ -46,7 +46,13 @@ export default function App() {
   const [codecs, setCodecs] = useState([])
   const [dupes, setDupes] = useState([])       // duplicate-download prompts, one at a time
   const [closing, setClosing] = useState(null)  // tab pending a close confirmation
-  const [downloadsSheet, setDownloadsSheet] = useState(false) // mobile-only slide-in panel
+  // Sheet state uses two flags rather than one so we can keep the element mounted
+  // through its slide-out animation. openSheet() sets both true; closeSheet() drops
+  // `open` — a class flip triggers the exit keyframe, and after it finishes the
+  // aside unmounts. Kept in App-level state so it survives tab-switches.
+  const [downloadsSheet, setDownloadsSheet] = useState({ mounted: false, open: false })
+  const openSheet = useCallback(() => setDownloadsSheet({ mounted: true, open: true }), [])
+  const closeSheet = useCallback(() => setDownloadsSheet((s) => ({ ...s, open: false })), [])
   const timers = useRef(new Map())
 
   useEffect(() => {
@@ -291,7 +297,7 @@ export default function App() {
           theme={theme}
           onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
           onLogout={onLogout}
-          onOpenDownloads={() => setDownloadsSheet(true)}
+          onOpenDownloads={openSheet}
           downloadCount={active ? active.jobs.length : 0}
         />
         <UrlBar onAnalyze={onAnalyze} analyzing={analyzing} />
@@ -342,15 +348,22 @@ export default function App() {
 
       {/* Mobile downloads: an off-canvas panel that slides in from the right when the
           header's ⋮ is tapped. Backdrop tap or the ← button in its corner closes it,
-          and clicking anywhere else inside the sheet keeps it open. */}
-      {downloadsSheet && active && (
+          taps inside the sheet keep it open. The `closing` class triggers the exit
+          animation; onAnimationEnd unmounts after the slide-out completes so the user
+          actually sees it leave rather than the sheet just vanishing. */}
+      {downloadsSheet.mounted && active && (
         <div
-          className="sheet-backdrop"
-          onClick={() => setDownloadsSheet(false)}
+          className={`sheet-backdrop ${downloadsSheet.open ? '' : 'closing'}`}
+          onClick={closeSheet}
+          onAnimationEnd={(e) => {
+            if (!downloadsSheet.open && e.target === e.currentTarget) {
+              setDownloadsSheet({ mounted: false, open: false })
+            }
+          }}
           role="presentation"
         >
           <aside
-            className="sheet glass"
+            className={`sheet glass ${downloadsSheet.open ? '' : 'closing'}`}
             role="dialog"
             aria-label="Downloads"
             onClick={(e) => e.stopPropagation()}
@@ -358,7 +371,7 @@ export default function App() {
             <div className="sheet-head">
               <button
                 className="icon-btn glass"
-                onClick={() => setDownloadsSheet(false)}
+                onClick={closeSheet}
                 aria-label="Close downloads"
                 title="Close"
               >

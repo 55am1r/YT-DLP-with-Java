@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import TrimSlider from './TrimSlider'
 import FormatPicker, { defaultFormat } from './FormatPicker'
+import DownloadButton from './DownloadButton'
 import { fmtDuration, fmtSize, parseUrlTimestamp } from '../utils'
 
 const AUDIO_FORMATS = ['mp3', 'm4a', 'opus', 'wav']
@@ -186,13 +187,12 @@ export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refre
         </div>
       )}
 
-      <button className="btn btn-primary btn-lg" onClick={submit}>
-        <i className="fa-solid fa-download" />
+      <DownloadButton onClick={submit}>
         Download {isAudio
           ? audioFormat.toUpperCase()
           : `${activeHeight}p · ${format.container.toUpperCase()}${format.codec !== 'none' ? ` · ${format.codec.toUpperCase()}` : ''}`}
         {trimOn && !wholeThing ? ' (clip)' : ''}
-      </button>
+      </DownloadButton>
     </section>
   )
 }
