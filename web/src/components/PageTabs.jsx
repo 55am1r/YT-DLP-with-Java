@@ -53,7 +53,7 @@ export default function PageTabs({ pages, activeId, onSelect, onClose }) {
     <div className="tabs-wrap">
       {nav.overflow && (
         <button
-          className="icon-round tabs-nav"
+          className="icon-round tabs-nav tabs-nav-prev"
           onClick={() => nudge(-1)}
           disabled={nav.atStart}
           aria-label="Scroll tabs left"
@@ -63,7 +63,13 @@ export default function PageTabs({ pages, activeId, onSelect, onClose }) {
         </button>
       )}
 
-      <div className="tabs" ref={stripRef} role="tablist">
+      <div
+        className={`tabs ${nav.overflow ? 'tabs-fade' : ''}
+          ${!nav.atStart ? 'tabs-fade-left' : ''}
+          ${!nav.atEnd ? 'tabs-fade-right' : ''}`}
+        ref={stripRef}
+        role="tablist"
+      >
         {pages.map((p) => {
           const on = p.id === activeId
           return (
@@ -92,7 +98,7 @@ export default function PageTabs({ pages, activeId, onSelect, onClose }) {
 
       {nav.overflow && (
         <button
-          className="icon-round tabs-nav"
+          className="icon-round tabs-nav tabs-nav-next"
           onClick={() => nudge(1)}
           disabled={nav.atEnd}
           aria-label="Scroll tabs right"
