@@ -13,7 +13,7 @@ const AUDIO_FORMATS = ['mp3', 'm4a', 'opus', 'wav']
  *    items that don't share it would silently hand people different files.
  *  - Multi-select   → each ticked item carries its own type, format and quality.
  */
-export default function PlaylistPanel({ analysis, onStart, codecs, config, onConfig }) {
+export default function PlaylistPanel({ analysis, onStart, codecs, config, onConfig, startedTick }) {
   const cfg = config || null
   const audioOnly = analysis.music
   const [mode, setMode] = useState(cfg?.mode ?? (audioOnly ? 'audio' : 'video'))
@@ -369,6 +369,7 @@ export default function PlaylistPanel({ analysis, onStart, codecs, config, onCon
 
       <DownloadButton
         onClick={submit}
+        signal={startedTick}
         disabled={uniformity.loading || (!zipMode && chosen.length === 0) || (zipMode && !sharedAudio && !height)}
       >
         {zipMode ? `Download all ${count} · ${sharedLabel}` : `Download ${chosen.length || ''} selected`}
