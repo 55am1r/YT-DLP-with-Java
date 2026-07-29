@@ -145,7 +145,10 @@ finishes in minutes rather than hours and the CPU stays free for other jobs.
   analysed panel and fill the empty space; the panel keeps its size whether downloads
   are present or not. The columns stack on narrower screens.
 - **Tabs.** Every analysed link is a tab — shown even for a single link — in one
-  horizontally scrolling strip that always keeps the active tab in view.
+  strip that always keeps the active tab in view. On desktop, overflow is navigated
+  by circular `<` / `>` arrow buttons that appear only when the strip overflows and
+  fade the tabs beneath them for a smooth transition. On mobile, the strip scrolls
+  natively by touch — no arrows.
 - **Responsive across screen sizes.** Below 750px the layout goes full-bleed and
   re-stacks — thumbnails go full width above their controls rather than shrinking
   into stamps — so a phone feels like an app rather than a scaled-down web page.

@@ -252,8 +252,12 @@ never count as duplicates, since retrying those is the entire point.
   right, top-aligned below the search bar. The panel's size is unaffected by whether
   downloads are present. Below 1000px the two columns stack.
 - **Tabs.** Every analysed link becomes a tab — shown even for a single link — in one
-  horizontally scrolling strip that always keeps the active tab fully in view, so the
-  user can see which link is working and what sits either side of it.
+  strip that always keeps the active tab fully in view. On desktop, overflow is
+  navigated by circular `<` and `>` arrow buttons that appear only when the strip
+  overflows; tabs fade under the arrows via a mask gradient so they pass beneath
+  smoothly rather than being cut off, and each arrow hides when its end is reached
+  so it never floats over content it can't move to. On mobile, the strip is
+  scrolled natively by touch and the arrows are hidden.
 - **Responsive.** Below 750px the layout goes full-bleed and re-stacks: thumbnails go
   full width above their controls instead of shrinking into stamps, segmented switches
   span the row, and the header actions group at the right. It reads as an app rather
