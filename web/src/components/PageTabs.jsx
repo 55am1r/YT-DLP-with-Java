@@ -28,11 +28,32 @@ export default function PageTabs({ pages, activeId, onSelect, onClose }) {
     if (!el) return
     el.addEventListener('scroll', measure, { passive: true })
     window.addEventListener('resize', measure)
+    // ResizeObserver catches layout changes (a tab added, container resized) that
+    // don't fire a scroll event but do change whether overflow / atEnd flip.
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
     return () => {
       el.removeEventListener('scroll', measure)
       window.removeEventListener('resize', measure)
+      ro.disconnect()
     }
   }, [measure])
+
+  /**
+   * A smooth scrollBy() doesn't fire per-frame scroll events in every browser —
+   * Chrome sometimes emits only start + end, so the arrow/fade never appear during
+   * the tween and the user has to overshoot before the state catches up. Poll
+   * measure() on rAF for the duration of any programmatic scroll to guarantee the
+   * UI keeps up with scrollLeft.
+   */
+  function measureForAWhile(ms = 800) {
+    const start = performance.now()
+    const tick = () => {
+      measure()
+      if (performance.now() - start < ms) requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  }
 
   // Bring the active tab out from under the mask fade / arrow. scrollIntoView with
   // inline:'nearest' calls the tab "visible" as soon as one pixel of it is in the
@@ -50,8 +71,10 @@ export default function PageTabs({ pages, activeId, onSelect, onClose }) {
     const rightHidden = tabBox.right - (stripBox.right - FADE) // …under the right fade
     if (leftHidden > 0) {
       strip.scrollBy({ left: -leftHidden - 4, behavior: 'smooth' })
+      measureForAWhile()
     } else if (rightHidden > 0) {
       strip.scrollBy({ left: rightHidden + 4, behavior: 'smooth' })
+      measureForAWhile()
     }
   }, [activeId, pages.length])
 
@@ -61,6 +84,7 @@ export default function PageTabs({ pages, activeId, onSelect, onClose }) {
     // Scroll roughly one visible width, so a single click moves the user meaningfully
     // through the strip regardless of how wide each tab is.
     el.scrollBy({ left: dir * Math.max(160, el.clientWidth * 0.85), behavior: 'smooth' })
+    measureForAWhile()
   }
 
   if (pages.length === 0) return null
