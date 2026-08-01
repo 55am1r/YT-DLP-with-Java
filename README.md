@@ -138,6 +138,12 @@ finishes in minutes rather than hours and the CPU stays free for other jobs.
 - **Transfer retries.** Fragment and extractor retries, added after testing showed
   YouTube intermittently dropping fragments under parallel load — failures that
   succeeded on a second attempt.
+- **Resumable transfers.** File delivery supports HTTP byte ranges with strong
+  validators, so a browser download broken by a network drop resumes from where it
+  stopped instead of starting over.
+- **Resume on retry.** A job that fails mid-download keeps its partial data on the
+  server; Retry re-runs it in place and yt-dlp continues from the partial file — a
+  drop at 70% only re-downloads the missing 30%.
 
 ### Interface
 
