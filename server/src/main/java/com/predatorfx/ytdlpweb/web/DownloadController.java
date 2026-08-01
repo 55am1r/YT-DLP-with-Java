@@ -183,12 +183,37 @@ public class DownloadController {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentDisposition(cd);
+        // Resumable transfers: advertise byte ranges and give the browser strong
+        // validators (ETag + Last-Modified). When a download breaks mid-transfer —
+        // tunnel hiccup, wifi switch — the browser's download manager can then ask for
+        // "Range: bytes=<where it stopped>-" instead of throwing the partial file away
+        // and starting over. Spring answers those with 206 Partial Content for
+        // Resource bodies automatically once the request carries a Range header.
+        long size = Files.size(path);
+        headers.set(HttpHeaders.ACCEPT_RANGES, "bytes");
+        headers.setETag("\"" + id + "-" + size + "\"");
+        headers.setLastModified(Files.getLastModifiedTime(path).toMillis());
 
         return ResponseEntity.ok()
                 .headers(headers)
                 .contentType(type)
-                .contentLength(Files.size(path))
+                .contentLength(size)
                 .body(new FileSystemResource(path));
+    }
+
+    /**
+     * Re-run a failed or canceled job in place — same id, same working directory.
+     * yt-dlp resumes from whatever partial file survived, so a network drop at 70%
+     * costs the remaining 30%, not the whole download. Completed jobs are refused
+     * (their file already exists; re-downloading goes through the normal flow).
+     */
+    @PostMapping("/jobs/{id}/retry")
+    public Job retryJob(@PathVariable String id) {
+        Job job = jobs.retry(id);
+        if (job == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No such job, or it is not in a retryable state");
+        }
+        return job;
     }
 
     /** yt-dlp version status. Pass ?refresh=true to force a check now. */

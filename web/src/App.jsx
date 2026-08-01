@@ -8,7 +8,7 @@ import DownloadsPanel from './components/DownloadsPanel'
 import ConfirmDialog from './components/ConfirmDialog'
 import ScrollFab from './components/ScrollFab'
 import Login from './components/Login'
-import { analyze, startJob, checkAuth, clearJobs, getCodecs, logout as apiLogout } from './api'
+import { analyze, startJob, checkAuth, clearJobs, getCodecs, retryJob, fileAvailable, logout as apiLogout } from './api'
 
 let seq = 0
 const STORE_KEY = 'ez-session-v1'
@@ -104,11 +104,28 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', warn)
   }, [pages])
 
-  // Resume polling for any restored job that was still running when we last saw it.
+  // Resume polling for any restored job that was still running when we last saw it,
+  // and health-check the ones restored as COMPLETED: if the server was restarted in
+  // between, their file is gone, and without this check the card would show a Save
+  // button that silently does nothing. A dead file becomes an interrupted card with
+  // a working Retry instead.
   useEffect(() => {
     if (!authed) return
     restored.current.pages.forEach((p) => p.jobs.forEach((j) => {
-      if (ACTIVE.has(j.status)) track(j.id)
+      if (ACTIVE.has(j.status)) {
+        track(j.id)
+      } else if (j.status === 'COMPLETED' && !j.saved) {
+        fileAvailable(j.id).then((ok) => {
+          if (!ok) {
+            setPages((prev) => prev.map((pg) => ({
+              ...pg,
+              jobs: pg.jobs.map((jj) => (jj.id === j.id
+                ? { ...jj, status: 'FAILED', interrupted: true, expiresAt: null, error: 'The file is no longer on the server. Retry to download it again.' }
+                : jj)),
+            })))
+          }
+        })
+      }
     }))
     restored.current = { pages: [], activeId: null }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -228,8 +245,22 @@ export default function App() {
     }
   }
 
-  /** Re-run a finished, failed or interrupted job with the exact settings it used. */
-  function retry(pageId, job) {
+  /**
+   * Re-run a failed or interrupted job. First choice is the server's in-place retry:
+   * same job id, same directory, so yt-dlp resumes from whatever partial file the
+   * failed attempt left behind — a drop at 70% only re-downloads the missing 30%.
+   * If the server no longer knows the job (it was restarted), fall back to submitting
+   * a fresh job with the exact settings the original used.
+   */
+  async function retry(pageId, job) {
+    try {
+      const resumed = await retryJob(job.id)
+      if (resumed) {
+        patchJob({ ...resumed, interrupted: false, error: null, saved: false })
+        track(job.id)
+        return
+      }
+    } catch { /* fall through to a fresh submit */ }
     if (job.request) onStart(pageId, job.request, true)
   }
 

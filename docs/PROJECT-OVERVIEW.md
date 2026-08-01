@@ -239,9 +239,22 @@ never count as duplicates, since retrying those is the entire point.
   background and never blocks a download, and its status is shown in the header.
 - **Concurrency cap.** A bounded worker pool (default 3) with a queue, so a team all
   clicking *Download* at once queues neatly instead of overwhelming the machine.
-- **Transfer retries.** Fragment, extractor and general retries, added after testing
-  showed YouTube intermittently dropping fragments under parallel load — failures that
-  succeeded on a second attempt.
+- **Transfer retries.** Fragment, extractor and general retries with a socket
+  timeout, so a brief network switch on the server side is absorbed inside one run —
+  yt-dlp keeps its partial data and continues rather than failing the job.
+- **Resumable delivery.** `/api/jobs/{id}/file` advertises `Accept-Ranges: bytes`
+  with ETag and Last-Modified validators and answers Range requests with
+  `206 Partial Content`, so a browser download broken by a network drop resumes from
+  where it stopped instead of being thrown away. Verified by interrupting a transfer
+  mid-file, resuming, and comparing SHA-256 against a clean download.
+- **Resume on retry.** A job that fails mid-download keeps its working directory;
+  `POST /api/jobs/{id}/retry` re-runs it with the same id and directory, and yt-dlp
+  continues from the partial file it finds there. Measured: a job killed at 36% with
+  a 45 MB partial resumed with the partial growing monotonically — never reset — and
+  completed. The UI's Retry button uses this first and only submits a fresh job when
+  the server no longer knows the original.
+- **Real failure reasons.** yt-dlp's last ERROR line is captured and shown on the
+  failed card (and logged), instead of only an opaque exit code.
 - **Robust quality selection.** `bestvideo[height<=N]+bestaudio` with fallbacks, so a
   chosen quality never triggers the "Requested format is not available" retry loop.
 

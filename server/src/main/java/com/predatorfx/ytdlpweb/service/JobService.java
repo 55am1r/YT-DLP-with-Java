@@ -166,6 +166,35 @@ public class JobService {
         return cleared;
     }
 
+    /**
+     * Re-run a FAILED or CANCELED job with its original id and working directory.
+     *
+     * Keeping the directory is the whole point: yt-dlp continues partial .part files
+     * it finds there (its default --continue behaviour), so a download that died at
+     * 70% resumes from 70% instead of redoing everything. Completed jobs are not
+     * retryable here — their file exists, and re-downloading is a new request.
+     */
+    public Job retry(String id) {
+        Job job = jobs.get(id);
+        if (job == null || (job.getStatus() != JobStatus.FAILED && job.getStatus() != JobStatus.CANCELED)) {
+            return null;
+        }
+        job.setCanceled(false);
+        job.setError(null);
+        job.setProgress(0);
+        job.setSpeed(null);
+        job.setEta(null);
+        job.setFinishedAt(null);
+        job.setExpiresAt(null);
+        job.setFilePath(null);
+        job.setFileName(null);
+        job.setStatus(JobStatus.QUEUED);
+        job.setPhase("Retrying…");
+        push(job);
+        pool.submit(() -> run(job));
+        return job;
+    }
+
     public boolean cancel(String id) {
         Job job = jobs.get(id);
         if (job == null || isTerminal(job.getStatus())) {

@@ -335,11 +335,21 @@ public class YtDlpService {
         onUpdate.accept(job);
 
         int[] lastEmitted = {-1};
+        // Keep yt-dlp's last ERROR line so a failure surfaces the actual reason
+        // ("unable to open for writing", "Video unavailable", …) instead of only an
+        // opaque exit code, both to the user and in the server log.
+        String[] lastError = {null};
         int exit;
         try {
             exit = Processes.stream(cmd, jobDir,
                     proc -> processes.put(job.getId(), proc),
-                    line -> handleLine(line, job, lastEmitted, onUpdate));
+                    line -> {
+                        if (line.contains("ERROR")) {
+                            lastError[0] = line;
+                            log.warn("Job {} yt-dlp: {}", job.getId(), line);
+                        }
+                        handleLine(line, job, lastEmitted, onUpdate);
+                    });
         } finally {
             processes.remove(job.getId());
         }
@@ -349,7 +359,9 @@ public class YtDlpService {
             return;
         }
         if (exit != 0) {
-            throw new IOException("yt-dlp exited with code " + exit + " (see server log)");
+            throw new IOException(lastError[0] != null
+                    ? lastError[0].replaceFirst(".*ERROR:\\s*", "").trim()
+                    : "yt-dlp exited with code " + exit + " (see server log)");
         }
 
         List<Path> produced = new ArrayList<>(listMedia(jobDir));
@@ -419,14 +431,21 @@ public class YtDlpService {
         // Matrix testing showed YouTube intermittently dropping a fragment when several
         // jobs run at once — the same request succeeded on a retry. Without these, that
         // surfaces to the user as a flat "download failed" for no visible reason.
+        // Generous retry budget so a wifi switch or a brief drop on the server side is
+        // absorbed inside one run — yt-dlp keeps its partial data and continues, rather
+        // than failing the job and losing everything. --socket-timeout makes a dead
+        // connection give up in 30s instead of hanging until the OS notices.
         cmd.add("--retries");
-        cmd.add("5");
+        cmd.add("15");
         cmd.add("--fragment-retries");
-        cmd.add("10");
+        cmd.add("40");
         cmd.add("--extractor-retries");
         cmd.add("3");
         cmd.add("--retry-sleep");
-        cmd.add("2");
+        cmd.add("3");
+        cmd.add("--socket-timeout");
+        cmd.add("30");
+        cmd.add("--continue");
         cmd.add(req.playlist() ? "--yes-playlist" : "--no-playlist");
         cmd.add("--embed-metadata");
         if (THUMBNAIL_OK.contains(req.targetExtension())) {

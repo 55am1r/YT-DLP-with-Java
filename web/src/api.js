@@ -116,6 +116,27 @@ export async function cancelJob(id) {
   await fetch(`/api/jobs/${id}/cancel`, { method: 'POST' })
 }
 
+/**
+ * Re-run a failed job in place on the server — same id, same directory — so yt-dlp
+ * resumes from the partial file instead of starting over. Returns the reset job, or
+ * null when the server no longer has it (restarted); the caller then falls back to
+ * submitting a fresh job.
+ */
+export async function retryJob(id) {
+  const res = await fetch(`/api/jobs/${id}/retry`, { method: 'POST' })
+  return res.ok ? res.json() : null
+}
+
+/** Is this job's finished file still actually downloadable? (HEAD, no body.) */
+export async function fileAvailable(id) {
+  try {
+    const res = await fetch(fileUrl(id), { method: 'HEAD' })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
 export function fileUrl(id) {
   return `/api/jobs/${id}/file`
 }
