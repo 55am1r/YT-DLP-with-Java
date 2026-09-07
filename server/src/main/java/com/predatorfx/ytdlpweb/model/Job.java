@@ -29,6 +29,7 @@ public class Job {
     // Set once the file is ready — what the UI shows on a finished card
     private volatile String container;          // actual extension, e.g. "mp4"
     private volatile Integer height;            // real video height, null for audio
+    private volatile String qualityLabel;       // "2160p · UHD" — NOT always height + "p"
     private volatile Long fileSize;             // bytes
     private volatile Long elapsedMs;            // how long the server took
     private volatile Long expiresAt;            // when the temp file is deleted
@@ -65,6 +66,7 @@ public class Job {
     public String getEta() { return eta; }
     public String getContainer() { return container; }
     public Integer getHeight() { return height; }
+    public String getQualityLabel() { return qualityLabel; }
     public Long getFileSize() { return fileSize; }
     public Long getElapsedMs() { return elapsedMs; }
     public Long getExpiresAt() { return expiresAt; }
@@ -87,6 +89,7 @@ public class Job {
     public void setEta(String eta) { this.eta = eta; }
     public void setContainer(String container) { this.container = container; }
     public void setHeight(Integer height) { this.height = height; }
+    public void setQualityLabel(String qualityLabel) { this.qualityLabel = qualityLabel; }
     public void setFileSize(Long fileSize) { this.fileSize = fileSize; }
     public void setElapsedMs(Long elapsedMs) { this.elapsedMs = elapsedMs; }
     public void setExpiresAt(Long expiresAt) { this.expiresAt = expiresAt; }

@@ -89,7 +89,10 @@ export function parseUrlTimestamp(url) {
 /** "1080p · MP4" for a finished job. */
 export function fmtKind(job) {
   const parts = []
-  if (job.height) parts.push(`${job.height}p`)
+  // The server sends qualityLabel because it knows the width too: a 2:1 4K file is
+  // 3840x1920, so height alone would name it "1920p" and understate it by two rungs.
+  if (job.qualityLabel) parts.push(job.qualityLabel)
+  else if (job.height) parts.push(`${job.height}p`)
   if (job.container) parts.push(job.container.toUpperCase())
   return parts.join(' · ')
 }

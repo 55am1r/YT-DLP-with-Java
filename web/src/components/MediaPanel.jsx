@@ -62,6 +62,10 @@ export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refre
 
   const heights = (analysis.videoFormats || []).map((f) => f.height)
   const activeHeight = heights.includes(height) ? height : (heights[0] ?? height)
+  // Reuse the server's label rather than rebuilding it — height alone is the wrong
+  // name for anything that isn't 16:9.
+  const activeLabel =
+    analysis.videoFormats?.find((f) => f.height === activeHeight)?.label ?? `${activeHeight}p`
 
   function submit() {
     onStart({
@@ -190,7 +194,7 @@ export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refre
       <DownloadButton onClick={submit} signal={startedTick}>
         Download {isAudio
           ? audioFormat.toUpperCase()
-          : `${activeHeight}p · ${format.container.toUpperCase()}${format.codec !== 'none' ? ` · ${format.codec.toUpperCase()}` : ''}`}
+          : `${activeLabel} · ${format.container.toUpperCase()}${format.codec !== 'none' ? ` · ${format.codec.toUpperCase()}` : ''}`}
         {trimOn && !wholeThing ? ' (clip)' : ''}
       </DownloadButton>
     </section>
