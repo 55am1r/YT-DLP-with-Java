@@ -9,16 +9,28 @@ export function fmtDuration(seconds) {
   return h ? `${h}:${mm}:${ss}` : `${m}:${ss}`
 }
 
+/**
+ * Decimal units — 1 MB is 1,000,000 bytes.
+ *
+ * This used to divide by 1024 while labelling the result "MB", so every figure on the
+ * card was a MiB wearing an MB label. Decimal is what the labels always claimed, what
+ * Finder reports, and what makes the speed readout honest.
+ */
 export function fmtSize(bytes) {
   if (!bytes) return ''
   const units = ['B', 'KB', 'MB', 'GB']
   let n = bytes
   let i = 0
-  while (n >= 1024 && i < units.length - 1) {
-    n /= 1024
+  while (n >= 1000 && i < units.length - 1) {
+    n /= 1000
     i++
   }
   return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`
+}
+
+/** "32.9 MB/s". Built on fmtSize so a size and a speed can never disagree on units. */
+export function fmtSpeed(bytesPerSec) {
+  return bytesPerSec > 0 ? `${fmtSize(bytesPerSec)}/s` : ''
 }
 
 /** "3.4s" / "1m 12s" — how long the server took. */

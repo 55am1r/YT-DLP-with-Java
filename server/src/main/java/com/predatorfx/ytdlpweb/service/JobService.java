@@ -182,8 +182,10 @@ public class JobService {
         job.setCanceled(false);
         job.setError(null);
         job.setProgress(0);
-        job.setSpeed(null);
+        job.setSpeedBps(null);
         job.setEta(null);
+        job.setDownloadedBytes(null);
+        job.setTotalBytes(null);
         job.setFinishedAt(null);
         job.setExpiresAt(null);
         job.setFilePath(null);
