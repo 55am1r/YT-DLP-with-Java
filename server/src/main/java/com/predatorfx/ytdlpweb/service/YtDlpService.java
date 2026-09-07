@@ -52,11 +52,26 @@ public class YtDlpService {
 
     private static final Logger log = LoggerFactory.getLogger(YtDlpService.class);
 
-    private static final Pattern PCT = Pattern.compile("\\[download\\]\\s+(\\d{1,3}(?:\\.\\d+)?)%");
+    /** Marks our own progress line, so it is never confused with yt-dlp's prose. */
+    private static final String EZ = "[EZ]";
+
     private static final Pattern ITEM = Pattern.compile("Downloading item (\\d+) of (\\d+)");
     private static final Pattern PL_TITLE = Pattern.compile("Downloading playlist: (.+)");
-    private static final Pattern SPEED = Pattern.compile("at\\s+([0-9.]+\\s*[KMGT]?i?B/s)");
-    private static final Pattern ETA = Pattern.compile("ETA\\s+([0-9:]+)");
+
+    /**
+     * Machine-readable progress, so nothing has to be recovered from human text.
+     *
+     * --progress-template REPLACES yt-dlp's "[download] 56.0% of 723.45MiB at 32.96MiB/s"
+     * lines rather than adding to them (verified), so this one line has to carry every
+     * field the parser needs — percent, speed and ETA included. The old regexes that
+     * scraped those out of the prose are gone with it: they can no longer match anything.
+     *
+     * Fields: status|downloaded|total|percent|speed|eta. Any field can be the literal
+     * "NA"; downloaded/total are integers, speed is a float, eta is an integer.
+     */
+    private static final String PROGRESS_TEMPLATE = "download:" + EZ
+            + "%(progress.status)s|%(progress.downloaded_bytes)s|%(progress.total_bytes)s"
+            + "|%(progress._percent_str)s|%(progress.speed)s|%(progress.eta)s";
 
     /**
      * Containers yt-dlp can embed a cover image into. WAV and WEBM cannot — passing
@@ -424,8 +439,10 @@ public class YtDlpService {
         long now = System.currentTimeMillis();
         job.setFinishedAt(now);
         job.setElapsedMs(job.getStartedAt() == null ? null : now - job.getStartedAt());
-        job.setSpeed(null);
+        job.setSpeedBps(null);
         job.setEta(null);
+        job.setDownloadedBytes(null);
+        job.setTotalBytes(null);
         job.setProgress(100);
         job.setStatus(JobStatus.COMPLETED);
         job.setPhase("Ready to download");
@@ -439,6 +456,8 @@ public class YtDlpService {
         cmd.add("--newline");
         cmd.add("--no-warnings");
         cmd.add("--ignore-config");
+        cmd.add("--progress-template");
+        cmd.add(PROGRESS_TEMPLATE);
         if (ffmpegIsPath()) {
             cmd.add("--ffmpeg-location");
             cmd.add(ffmpegBin);
@@ -552,34 +571,98 @@ public class YtDlpService {
             return;
         }
 
-        Matcher mp = PCT.matcher(line);
-        if (mp.find()) {
-            double pct = Double.parseDouble(mp.group(1));
-            job.setStatus(JobStatus.DOWNLOADING);
-            Matcher sp = SPEED.matcher(line);
-            if (sp.find()) {
-                job.setSpeed(sp.group(1).replace(" ", ""));
+        if (!line.startsWith(EZ)) {
+            return;
+        }
+        Progress p = Progress.parse(line);
+        if (p == null) {
+            return; // malformed tick — never let it abort the read loop
+        }
+        job.setStatus(JobStatus.DOWNLOADING);
+
+        // Byte counters are written on EVERY tick, deliberately OUTSIDE the
+        // whole-percent guard below. The browser polls the job every 800ms rather
+        // than listening on a stream, so it reads whatever is on the object at that
+        // moment — throttling these to 1% steps would make a 4.5GB download's counter
+        // lurch in 45MB jumps for no gain.
+        job.setDownloadedBytes(p.downloaded);
+        job.setTotalBytes(p.total);
+        // Hold the last known rate through the 2-5 "NA" ticks that open every stream
+        // and follow every resume, instead of blinking the readout out. On the final
+        // tick yt-dlp redefines speed as total/elapsed — a whole-transfer average, not
+        // the current rate — so that one is dropped rather than shown as a sudden halving.
+        if (p.speed != null && !p.finished) {
+            job.setSpeedBps(p.speed);
+        }
+        job.setEta(p.eta);
+
+        int emit;
+        String phase;
+        if (job.getPlaylistCount() != null && job.getPlaylistCount() > 0) {
+            int idx = job.getPlaylistIndex() == null ? 1 : job.getPlaylistIndex();
+            emit = (int) Math.floor(((idx - 1) + p.percent / 100.0) / job.getPlaylistCount() * 100);
+            phase = "Item " + idx + "/" + job.getPlaylistCount();
+        } else {
+            emit = (int) Math.floor(p.percent);
+            phase = "Downloading…";
+        }
+        if (emit != lastEmitted[0]) {
+            lastEmitted[0] = emit;
+            job.setProgress(emit);
+            job.setPhase(phase);
+            onUpdate.accept(job);
+        }
+    }
+
+    /**
+     * One parsed progress tick. Package-private so the parser can be tested without
+     * running a download — it is the only place a malformed line could throw inside
+     * the output reader and kill a live job.
+     */
+    record Progress(long downloaded, Long total, Double speed, String eta,
+                    double percent, boolean finished) {
+
+        static Progress parse(String line) {
+            String[] f = line.substring(EZ.length()).split("\\|", -1);
+            if (f.length < 6) {
+                return null;
             }
-            Matcher et = ETA.matcher(line);
-            if (et.find()) {
-                job.setEta(et.group(1));
+            Long downloaded = num(f[1]) == null ? null : num(f[1]).longValue();
+            if (downloaded == null) {
+                return null; // nothing useful without it
             }
-            int emit;
-            String phase;
-            if (job.getPlaylistCount() != null && job.getPlaylistCount() > 0) {
-                int idx = job.getPlaylistIndex() == null ? 1 : job.getPlaylistIndex();
-                emit = (int) Math.floor(((idx - 1) + pct / 100.0) / job.getPlaylistCount() * 100);
-                phase = "Item " + idx + "/" + job.getPlaylistCount() + " — " + (int) pct + "%";
-            } else {
-                emit = (int) Math.floor(pct);
-                phase = "Downloading… " + emit + "%";
+            Double total = num(f[2]);
+            Double speed = num(f[4]);
+            Double etaSecs = num(f[5]);
+            double percent = pct(f[3]);
+            return new Progress(downloaded,
+                    total == null ? null : total.longValue(),
+                    speed,
+                    etaSecs == null ? null : clock(etaSecs.longValue()),
+                    percent,
+                    "finished".equals(f[0]));
+        }
+
+        /** yt-dlp writes the literal "NA" for anything it doesn't know yet. Speed and
+         *  the byte estimate arrive as floats, so everything is read as one. */
+        private static Double num(String s) {
+            try {
+                return Double.valueOf(s.trim());
+            } catch (RuntimeException e) {
+                return null;
             }
-            if (emit != lastEmitted[0]) {
-                lastEmitted[0] = emit;
-                job.setProgress(emit);
-                job.setPhase(phase);
-                onUpdate.accept(job);
-            }
+        }
+
+        /** "_percent_str" arrives padded, e.g. "  0.1%". */
+        private static double pct(String s) {
+            Double d = num(s.replace("%", ""));
+            return d == null ? 0 : d;
+        }
+
+        private static String clock(long secs) {
+            return secs >= 3600
+                    ? String.format("%d:%02d:%02d", secs / 3600, (secs % 3600) / 60, secs % 60)
+                    : String.format("%02d:%02d", secs / 60, secs % 60);
         }
     }
 
@@ -632,8 +715,10 @@ public class YtDlpService {
         String prefix = total > 1 ? "Compressing " + idx + "/" + total + " to " + what : "Compressing to " + what;
         job.setStatus(JobStatus.COMPRESSING);
         job.setPhase(prefix + "…");
-        job.setSpeed(null);
+        job.setSpeedBps(null);
         job.setEta(null);
+        job.setDownloadedBytes(null);
+        job.setTotalBytes(null);
         onUpdate.accept(job);
         log.info("Job {} compressing: {}", job.getId(), String.join(" ", cmd));
 
@@ -789,6 +874,10 @@ public class YtDlpService {
     private void finishCanceled(Job job, Path jobDir, Consumer<Job> onUpdate) {
         deleteDirQuietly(jobDir);
         job.setProgress(0);
+        job.setSpeedBps(null);
+        job.setEta(null);
+        job.setDownloadedBytes(null);
+        job.setTotalBytes(null);
         job.setStatus(JobStatus.CANCELED);
         job.setPhase("Canceled");
         job.setFinishedAt(System.currentTimeMillis());

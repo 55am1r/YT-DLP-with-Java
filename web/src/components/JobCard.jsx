@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fileUrl, pauseJob, resumeJob, cancelJob } from '../api'
-import { fmtSize, fmtElapsed, fmtCountdown, fmtKind } from '../utils'
+import { fmtSize, fmtSpeed, fmtElapsed, fmtCountdown, fmtKind } from '../utils'
 
 const LABELS = {
   QUEUED: 'Queued',
@@ -35,6 +35,22 @@ export default function JobCard({ job, onExpired, onRetry, onSaved }) {
   const bad = failed || job.status === 'CANCELED'
   const indet = INDETERMINATE.has(job.status) || (job.status === 'DOWNLOADING' && (job.progress || 0) === 0)
   const pct = Math.max(0, Math.min(100, job.progress || 0))
+
+  // While a transfer is live the byte counter takes over the foot line. The bar already
+  // shows the fraction geometrically and the pill already says "Downloading", so the
+  // percent text that used to sit here was the third copy of the same number — and it
+  // was the line that wrapped beside Pause/Cancel on a narrow card.
+  // Totals are per-stream: a merged download reports the video stream, then the audio
+  // one. yt-dlp guarantees downloaded <= total, so this can never read "300 of 200".
+  // ponytail: per-stream is honest and matches the bar, which already sweeps twice.
+  // If the video->audio reset is ever confusing, accumulate on the finished tick.
+  const dl = job.downloadedBytes
+  const total = job.totalBytes
+  const sizeLine = job.status === 'DOWNLOADING' && dl > 0
+    ? (total > 0
+        ? <><b>{fmtSize(dl)}</b> of <b>{fmtSize(total)}</b></>
+        : <><b>{fmtSize(dl)}</b> downloaded</>)   // m3u8/live report no total at all
+    : null
 
   // Pre-fetch the finished file so "Save file" is instant when the user comes back.
   useEffect(() => {
@@ -83,7 +99,7 @@ export default function JobCard({ job, onExpired, onRetry, onSaved }) {
       )}
 
       <div className="job-info">
-        {job.status === 'DOWNLOADING' && job.speed && <span><i className="fa-solid fa-gauge-high" /> <b>{job.speed}</b></span>}
+        {job.status === 'DOWNLOADING' && job.speedBps > 0 && <span><i className="fa-solid fa-gauge-high" /> <b>{fmtSpeed(job.speedBps)}</b></span>}
         {job.status === 'DOWNLOADING' && job.eta && <span><i className="fa-regular fa-clock" /> ETA <b>{job.eta}</b></span>}
         {done && fmtKind(job) && <span><b>{fmtKind(job)}</b></span>}
         {done && job.fileSize > 0 && <span>{fmtSize(job.fileSize)}</span>}
@@ -97,7 +113,15 @@ export default function JobCard({ job, onExpired, onRetry, onSaved }) {
       )}
 
       <div className="job-foot">
-        <span className="muted small">{failed ? job.error || 'Something went wrong' : job.phase}</span>
+        <span className="muted small">
+          {failed
+            ? job.error || 'Something went wrong'
+            : sizeLine
+              // On a playlist the phase names the item, so the bytes are qualified by it
+              // and can't be misread as the whole job: "Item 3/12 — 245 MB of 723 MB".
+              ? (job.playlistCount > 0 ? <>{job.phase} — {sizeLine}</> : sizeLine)
+              : job.phase}
+        </span>
         <div className="job-actions">
           {job.status === 'DOWNLOADING' && (
             <button className="btn btn-sm" onClick={() => pauseJob(job.id)}>

@@ -23,7 +23,11 @@ public class Job {
     private volatile String error;
 
     // Live transfer info (parsed from yt-dlp output)
-    private volatile String speed;              // e.g. "12.3MiB/s"
+    // Raw numbers, not display strings: the browser owns formatting so there is exactly
+    // one place that decides MB vs MiB. Sending "12.3MiB/s" was what made the units wrong.
+    private volatile Long speedBps;             // bytes/sec, null until yt-dlp knows
+    private volatile Long downloadedBytes;      // bytes fetched for the CURRENT stream
+    private volatile Long totalBytes;           // that stream's size; null when unknown
     private volatile String eta;                // e.g. "00:42"
 
     // Set once the file is ready — what the UI shows on a finished card
@@ -62,7 +66,9 @@ public class Job {
     public String getTitle() { return title; }
     public String getFileName() { return fileName; }
     public String getError() { return error; }
-    public String getSpeed() { return speed; }
+    public Long getSpeedBps() { return speedBps; }
+    public Long getDownloadedBytes() { return downloadedBytes; }
+    public Long getTotalBytes() { return totalBytes; }
     public String getEta() { return eta; }
     public String getContainer() { return container; }
     public Integer getHeight() { return height; }
@@ -85,7 +91,9 @@ public class Job {
     public void setTitle(String title) { this.title = title; }
     public void setFileName(String fileName) { this.fileName = fileName; }
     public void setError(String error) { this.error = error; }
-    public void setSpeed(String speed) { this.speed = speed; }
+    public void setSpeedBps(Double speedBps) { this.speedBps = speedBps == null ? null : speedBps.longValue(); }
+    public void setDownloadedBytes(Long downloadedBytes) { this.downloadedBytes = downloadedBytes; }
+    public void setTotalBytes(Long totalBytes) { this.totalBytes = totalBytes; }
     public void setEta(String eta) { this.eta = eta; }
     public void setContainer(String container) { this.container = container; }
     public void setHeight(Integer height) { this.height = height; }
