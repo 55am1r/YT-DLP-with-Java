@@ -1,6 +1,7 @@
 package com.predatorfx.ytdlpweb.util;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -16,6 +17,11 @@ import java.util.function.Consumer;
  * yt-dlp / ffmpeg / brew resolve no matter how the server was launched.
  */
 public final class Processes {
+
+    /** True on Windows. Shared here because path shape, binary names and the yt-dlp
+     *  update route all differ, and every caller needs the same answer. */
+    public static final boolean WINDOWS =
+            System.getProperty("os.name", "").toLowerCase().startsWith("windows");
 
     private Processes() {}
 
@@ -82,8 +88,15 @@ public final class Processes {
     }
 
     private static void applyPath(ProcessBuilder pb) {
+        // macOS only: under launchd, Homebrew's bin is not on PATH. On Windows that
+        // directory does not exist and the separator is ';', so prepending it would
+        // corrupt PATH for every subprocess we start.
+        if (WINDOWS) {
+            return;
+        }
         var env = pb.environment();
         String brewBin = "/opt/homebrew/bin";
-        env.merge("PATH", brewBin, (old, add) -> old.contains(add) ? old : add + ":" + old);
+        env.merge("PATH", brewBin,
+                (old, add) -> old.contains(add) ? old : add + File.pathSeparator + old);
     }
 }

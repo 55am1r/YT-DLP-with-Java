@@ -74,6 +74,22 @@ public class CodecCatalog {
                 null, List.of("mp4", "mkv"), "80–90%", true),
                 "h264_videotoolbox", List.of(), 0.70));
 
+        // Off a Mac there is no VideoToolbox. Fall back to whatever GPU encoder this
+        // host's ffmpeg reports — NVIDIA, Intel Quick Sync, AMD — so moving the server
+        // to a Windows box doesn't silently drop the two most-used options. First match
+        // wins (add() is putIfAbsent), so VideoToolbox still takes priority on a Mac.
+        for (String hw : List.of("nvenc", "qsv", "amf")) {
+            addIf(encoders, "hevc_" + hw, new Spec(new CodecOption("hevc", "H.265 / HEVC",
+                    "A third smaller and quick — the GPU's media engine does the encoding",
+                    "Recommended", List.of("mp4", "mkv"), "65–90%", true),
+                    "hevc_" + hw, List.of(), 0.50));
+
+            addIf(encoders, "h264_" + hw, new Spec(new CodecOption("h264", "H.264 / AVC",
+                    "Plays on anything — older phones, TVs, editing suites",
+                    null, List.of("mp4", "mkv"), "80–90%", true),
+                    "h264_" + hw, List.of(), 0.70));
+        }
+
         // Genuinely the smallest of the lot, but software-encoded: expect a long wait on
         // anything long or high-resolution.
         addIf(encoders, "libsvtav1", new Spec(new CodecOption("av1", "AV1",
@@ -90,19 +106,32 @@ public class CodecCatalog {
                 null, List.of("mkv", "webm"), "~100%", false),
                 "libvpx-vp9", List.of("-row-mt", "1", "-crf", "33"), 0.55));
 
-        log.info("Compression options available: {}", specs.keySet());
+        specs.forEach((id, sp) -> log.info("Compression option '{}' -> {}", id,
+                sp.encoder() == null ? "no re-encode" : sp.encoder()));
+        if (!specs.containsKey("hevc") && !specs.containsKey("h264")) {
+            log.warn("ffmpeg reports no hardware H.265/H.264 encoder — only 'Original'"
+                    + " and the software codecs will be offered");
+        }
     }
 
+    /** First registration for an id wins, so candidates are listed best-first. */
     private void add(Spec s) {
-        specs.put(s.option().id(), s);
+        specs.putIfAbsent(s.option().id(), s);
     }
 
     private void addIf(String encoders, String encoder, Spec s) {
         if (encoders.contains(encoder)) {
             add(s);
         } else {
-            log.warn("ffmpeg has no {} encoder — hiding the {} option", encoder, s.option().id());
+            log.debug("ffmpeg has no {} encoder", encoder);
         }
+    }
+
+    /** Hardware encoders accept a real rate cap. SVT-AV1 refuses one outside CRF mode
+     *  and libvpx already treats -b:v as its ceiling. */
+    private static boolean isHardware(String encoder) {
+        return encoder.contains("videotoolbox") || encoder.contains("nvenc")
+                || encoder.contains("qsv") || encoder.contains("amf");
     }
 
     private String probeEncoders() {
@@ -153,17 +182,19 @@ public class CodecCatalog {
         if (sourceKbps > 0) {
             long target = Math.max(120, Math.round(sourceKbps * s.targetRatio()));
             out.addAll(List.of("-b:v", target + "k"));
-            // Only the VideoToolbox encoders take a rate cap here. SVT-AV1 refuses to
+            // Only the hardware encoders take a rate cap here. SVT-AV1 refuses to
             // open at all ("Max Bitrate only supported with CRF mode"), and libvpx runs
             // in constrained-quality mode where -b:v is already the ceiling.
-            if (s.encoder().contains("videotoolbox")) {
+            if (isHardware(s.encoder())) {
                 out.addAll(List.of(
                         "-maxrate", Math.round(target * 1.5) + "k",
                         "-bufsize", (target * 3) + "k"));
             }
         } else if (s.encoder().contains("videotoolbox")) {
             out.addAll(List.of("-q:v", "60"));
-        } else if (!out.contains("-crf")) {
+        } else if (!isHardware(s.encoder()) && !out.contains("-crf")) {
+            // -crf is a software-encoder option; nvenc/qsv/amf reject it, so with an
+            // unknown source bitrate they simply run at their own default.
             out.addAll(List.of("-crf", "34"));
         }
         return out;
