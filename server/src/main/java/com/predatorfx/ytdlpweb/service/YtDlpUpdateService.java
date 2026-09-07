@@ -21,8 +21,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Runs in the BACKGROUND (startup + a periodic schedule) — never on a download's
  * critical path — so a slow brew/network check can't stall a user's download.
  *
- * IMPORTANT: yt-dlp here is installed via Homebrew, so we update with
- * `brew upgrade yt-dlp`. We must NOT call `yt-dlp -U` — on brew installs it hangs.
+ * IMPORTANT: on macOS yt-dlp is installed via Homebrew, so we update with
+ * `brew upgrade yt-dlp` — `yt-dlp -U` HANGS on a brew-managed install. On Windows
+ * yt-dlp is a standalone binary with no package manager behind it, where `-U` is
+ * the correct (and only) route.
  *
  * Results are cached for {@code ytdlp.update-check-interval-minutes}.
  */
@@ -75,14 +77,17 @@ public class YtDlpUpdateService {
         if (latest == null) {
             msg = "Couldn't reach GitHub to check latest — using installed " + installed;
         } else if (compare(installed, latest) < 0) {
-            log.info("yt-dlp {} is behind latest {} — upgrading via Homebrew", installed, latest);
+            log.info("yt-dlp {} is behind latest {} — upgrading via {}", installed, latest,
+                    Processes.WINDOWS ? "yt-dlp -U" : "Homebrew");
             String before = installed;
-            boolean ok = brewUpgrade();
+            boolean ok = upgrade();
             installed = readInstalled();
             updated = ok && !installed.equals(before);
             msg = updated
                     ? "Updated yt-dlp " + before + " → " + installed
-                    : "Tried to upgrade; now " + installed + " (Homebrew formula may lag " + latest + ")";
+                    : Processes.WINDOWS
+                        ? "Tried to upgrade; now " + installed
+                        : "Tried to upgrade; now " + installed + " (Homebrew formula may lag " + latest + ")";
         } else {
             msg = "yt-dlp " + installed + " is up to date";
         }
@@ -166,16 +171,20 @@ public class YtDlpUpdateService {
         }
     }
 
-    private boolean brewUpgrade() {
+    private boolean upgrade() {
+        // `brew upgrade` auto-runs `brew update` first if its formulae are stale.
+        // On Windows there is no brew, and the standalone binary self-updates.
+        List<String> cmd = Processes.WINDOWS
+                ? List.of(bin, "-U")
+                : List.of(brewBin, "upgrade", brewFormula);
         try {
-            // `brew upgrade` auto-runs `brew update` first if its formulae are stale.
-            Processes.Result r = Processes.run(List.of(brewBin, "upgrade", brewFormula), Duration.ofMinutes(6));
+            Processes.Result r = Processes.run(cmd, Duration.ofMinutes(6));
             if (r.code() != 0) {
-                log.warn("brew upgrade exited {}: {}", r.code(), r.stderr().strip());
+                log.warn("{} exited {}: {}", String.join(" ", cmd), r.code(), r.stderr().strip());
             }
             return r.code() == 0;
         } catch (Exception e) {
-            log.warn("brew upgrade failed: {}", e.toString());
+            log.warn("{} failed: {}", String.join(" ", cmd), e.toString());
             return false;
         }
     }
