@@ -21,6 +21,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -237,6 +238,7 @@ public class YtDlpService {
         JsonNode formats = root.path("formats");
         TreeMap<Integer, Long> sizeByHeight = new TreeMap<>(Comparator.reverseOrder());
         TreeMap<Integer, String> noteByHeight = new TreeMap<>();
+        TreeMap<Integer, Integer> widthByHeight = new TreeMap<>();
         if (formats.isArray()) {
             for (JsonNode f : formats) {
                 if ("none".equals(f.path("vcodec").asText("none"))) {
@@ -251,6 +253,7 @@ public class YtDlpService {
                         : (f.has("filesize_approx") && f.get("filesize_approx").isNumber()
                                 ? f.get("filesize_approx").asLong() : 0);
                 sizeByHeight.merge(h, size, Math::max);
+                widthByHeight.merge(h, f.path("width").asInt(0), Math::max);
                 int fps = f.path("fps").asInt(0);
                 if (fps >= 50) {
                     noteByHeight.put(h, fps + "fps");
@@ -258,10 +261,18 @@ public class YtDlpService {
             }
         }
         List<VideoFormatOption> out = new ArrayList<>();
+        Set<String> claimed = new HashSet<>();
+        // Reverse-ordered, so the tallest stream claims a quality class first. Without
+        // this, YouTube's near-identical odd-aspect renditions (872x480 and 854x470 are
+        // both "480p") would show as two buttons that fetch effectively the same file.
         for (var e : sizeByHeight.entrySet()) {
             int h = e.getKey();
+            String label = label(widthByHeight.getOrDefault(h, 0), h);
+            if (!claimed.add(label)) {
+                continue;
+            }
             Long size = e.getValue() > 0 ? e.getValue() : null;
-            out.add(new VideoFormatOption(h, label(h), noteByHeight.get(h), size));
+            out.add(new VideoFormatOption(h, label, noteByHeight.get(h), size));
         }
         return out;
     }
@@ -308,7 +319,9 @@ public class YtDlpService {
         int[] hs = {2160, 1440, 1080, 720, 480, 360, 240, 144};
         List<VideoFormatOption> out = new ArrayList<>();
         for (int h : hs) {
-            out.add(new VideoFormatOption(h, label(h), null, null));
+            // No width to go on — these are the standard 16:9 tiers, where the class
+            // is the height, so the height fallback in qualityClass() is exactly right.
+            out.add(new VideoFormatOption(h, label(0, h), null, null));
         }
         return out;
     }
@@ -402,7 +415,11 @@ public class YtDlpService {
         job.setContainer(ext(deliver));
         job.setFileSize(size(deliver));
         if (!req.isAudio()) {
-            job.setHeight(probeHeight(deliver));
+            int[] wh = probeDimensions(deliver);
+            if (wh != null) {
+                job.setHeight(wh[1]);
+                job.setQualityLabel(label(wh[0], wh[1]));
+            }
         }
         long now = System.currentTimeMillis();
         job.setFinishedAt(now);
@@ -422,7 +439,7 @@ public class YtDlpService {
         cmd.add("--newline");
         cmd.add("--no-warnings");
         cmd.add("--ignore-config");
-        if (ffmpegBin != null && ffmpegBin.contains("/")) {
+        if (ffmpegIsPath()) {
             cmd.add("--ffmpeg-location");
             cmd.add(ffmpegBin);
         }
@@ -710,10 +727,16 @@ public class YtDlpService {
         }
     }
 
+    /** True when ffmpeg.bin is a real path rather than a bare name left to PATH.
+     *  Path.of handles both "/opt/homebrew/bin/ffmpeg" and "C:\\ffmpeg\\bin\\ffmpeg.exe";
+     *  the old contains("/") test saw a Windows path as a bare name. */
+    private boolean ffmpegIsPath() {
+        return ffmpegBin != null && Path.of(ffmpegBin).getParent() != null;
+    }
+
     private String ffprobeBin() {
-        return (ffmpegBin != null && ffmpegBin.contains("/"))
-                ? Path.of(ffmpegBin).resolveSibling("ffprobe").toString()
-                : "ffprobe";
+        String name = Processes.WINDOWS ? "ffprobe.exe" : "ffprobe";
+        return ffmpegIsPath() ? Path.of(ffmpegBin).resolveSibling(name).toString() : name;
     }
 
     // ------------------------------------------------------------- CONTROLS
@@ -824,18 +847,26 @@ public class YtDlpService {
         }
     }
 
-    /** Real height of the finished video, so a card can say "1080p" instead of guessing. */
-    private Integer probeHeight(Path file) {
+    /**
+     * Real dimensions of the finished video, so the card can name the quality actually
+     * delivered. Width matters as much as height here: a 2:1 4K file is 3840x1920, and
+     * height alone understated it as "1920p".
+     */
+    private int[] probeDimensions(Path file) {
         try {
             Processes.Result r = Processes.run(List.of(ffprobeBin(), "-v", "error",
-                    "-select_streams", "v:0", "-show_entries", "stream=height",
+                    "-select_streams", "v:0", "-show_entries", "stream=width,height",
                     "-of", "csv=p=0", file.toString()), Duration.ofSeconds(20));
             String s = r.stdout().trim();
             int nl = s.indexOf('\n');
             if (nl > 0) {
                 s = s.substring(0, nl).trim();
             }
-            return s.isEmpty() ? null : Integer.valueOf(s);
+            String[] wh = s.split(",");
+            if (wh.length < 2) {
+                return null;
+            }
+            return new int[] {Integer.parseInt(wh[0].trim()), Integer.parseInt(wh[1].trim())};
         } catch (Exception e) {
             return null;
         }
@@ -864,19 +895,43 @@ public class YtDlpService {
         return s.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
     }
 
+    /** The broadcast rungs a quality class snaps to, tallest first. */
+    private static final int[] LADDER = {4320, 2160, 1440, 1080, 720, 480, 360, 240, 144};
+
     /**
-     * Only the standard landscape heights get a marketing suffix. Vertical/Shorts videos
-     * report odd heights (3840, 1280, 854…) where ">=" ranges produced wrong and duplicated
-     * labels like "1280p (Full HD)" next to "1080p (Full HD)".
+     * The quality class YouTube itself would name this stream. It stops matching the pixel
+     * height the moment a video is not 16:9: a 2:1 video's 4K rendition is 3840x1920, so
+     * naming it by height called it "1920p", which reads as 1080p-class — the 4K option
+     * looked like it was missing entirely.
+     *
+     * Wider than 16:9 → the WIDTH carries the class (3840 wide is 2160p, which is exactly
+     * what `yt-dlp -F` reports in its own notes). 16:9 or narrower — 4:3, square, vertical
+     * Shorts — → the short side, which is how a 1080x1920 Short is correctly "1080p".
      */
-    private static String label(int h) {
-        return switch (h) {
+    static int qualityClass(int w, int h) {
+        if (w <= 0) {
+            return h;
+        }
+        int c = (w * 9 > h * 16) ? Math.round(w * 9f / 16f) : Math.min(w, h);
+        // YouTube's odd-aspect renditions land just off a rung — 872x480 computes 491.
+        // Snap within 5% so it reads "480p" rather than "491p".
+        for (int rung : LADDER) {
+            if (Math.abs(c - rung) * 20 <= rung) {
+                return rung;
+            }
+        }
+        return c;
+    }
+
+    private static String label(int w, int h) {
+        int c = qualityClass(w, h);
+        return switch (c) {
             case 4320 -> "4320p · UHD-8K";
             case 2160 -> "2160p · UHD";
             case 1440 -> "1440p · QHD";
             case 1080 -> "1080p · FHD";
             case 720 -> "720p · HD";
-            default -> h + "p";
+            default -> c + "p";
         };
     }
 

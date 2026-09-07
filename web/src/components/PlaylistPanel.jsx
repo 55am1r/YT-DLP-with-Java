@@ -72,7 +72,8 @@ export default function PlaylistPanel({ analysis, onStart, codecs, config, onCon
   const commonFormats = uniformity.common || []
   const sharedLabel = sharedAudio
     ? audioFormat.toUpperCase()
-    : `${height ?? '—'}p · ${format.container.toUpperCase()}`
+    : `${commonFormats.find((f) => f.height === height)?.label ?? `${height ?? '—'}p`}`
+      + ` · ${format.container.toUpperCase()}`
 
   const defaults = () => ({
     kind: audioOnly ? 'audio' : mode,
