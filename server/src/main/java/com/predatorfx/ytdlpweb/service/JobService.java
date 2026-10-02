@@ -190,6 +190,8 @@ public class JobService {
         job.setSecondaryProgress(0);
         job.setFinalizingProgress(0);
         job.setCurrentStep("PRIMARY");
+        job.setConvert(false);
+        job.setConvertProgress(0);
         job.setFinishedAt(null);
         job.setExpiresAt(null);
         job.setFilePath(null);

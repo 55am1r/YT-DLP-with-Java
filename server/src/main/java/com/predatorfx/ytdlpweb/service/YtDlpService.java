@@ -66,12 +66,14 @@ public class YtDlpService {
      * field the parser needs — percent, speed and ETA included. The old regexes that
      * scraped those out of the prose are gone with it: they can no longer match anything.
      *
-     * Fields: status|downloaded|total|percent|speed|eta. Any field can be the literal
-     * "NA"; downloaded/total are integers, speed is a float, eta is an integer.
+     * Fields: status|downloaded|total|percent|speed|eta|vcodec. Any field can be the literal
+     * "NA"; downloaded/total are integers, speed is a float, eta is an integer. vcodec is
+     * the codec of the stream being fetched — "none" for the audio one — which is how an
+     * Auto job learns on its first tick that it will need converting to H.264.
      */
     private static final String PROGRESS_TEMPLATE = "download:" + EZ
             + "%(progress.status)s|%(progress.downloaded_bytes)s|%(progress.total_bytes)s"
-            + "|%(progress._percent_str)s|%(progress.speed)s|%(progress.eta)s";
+            + "|%(progress._percent_str)s|%(progress.speed)s|%(progress.eta)s|%(info.vcodec)s";
 
     /**
      * Containers yt-dlp can embed a cover image into. WAV and WEBM cannot — passing
@@ -354,6 +356,10 @@ public class YtDlpService {
             return;
         }
 
+        // Advanced always re-encodes; Auto finds out from its first progress tick (handleLine).
+        job.setConvert(!req.isAudio() && codecs.isReencode(req.codecOrDefault()));
+        job.setConvertProgress(0);
+
         List<String> cmd = buildCommand(req, jobDir);
         log.info("Job {} running: {}", job.getId(), String.join(" ", cmd));
 
@@ -455,6 +461,9 @@ public class YtDlpService {
         job.setPrimaryProgress(100);
         job.setSecondaryProgress(100);
         job.setFinalizingProgress(100);
+        if (job.isConvert()) {
+            job.setConvertProgress(100);
+        }
         job.setCurrentStep("FINALIZING");
         job.setProgress(100);
         job.setStatus(JobStatus.COMPLETED);
@@ -644,6 +653,13 @@ public class YtDlpService {
         }
         job.setEta(p.eta);
         updateTransferProgress(job, p);
+        // Auto converts only what YouTube cannot serve as H.264 (everything above 1080p).
+        // The video stream's very first tick names its codec, so the card can show the
+        // conversion stage from the start rather than having it appear — and the overall
+        // ring dip — halfway through.
+        if (!job.isConvert() && job.getRequest().wantsUniversal() && needsH264Conversion(p.vcodec())) {
+            job.setConvert(true);
+        }
 
         int emit;
         String phase;
@@ -669,7 +685,7 @@ public class YtDlpService {
      * the output reader and kill a live job.
      */
     record Progress(long downloaded, Long total, Double speed, String eta,
-                    double percent, boolean finished) {
+                    double percent, boolean finished, String vcodec) {
 
         static Progress parse(String line) {
             String[] f = line.substring(EZ.length()).split("\\|", -1);
@@ -684,12 +700,14 @@ public class YtDlpService {
             Double speed = num(f[4]);
             Double etaSecs = num(f[5]);
             double percent = pct(f[3]);
+            String vcodec = f.length > 6 ? f[6].trim() : "";
             return new Progress(downloaded,
                     total == null ? null : total.longValue(),
                     speed,
                     etaSecs == null ? null : clock(etaSecs.longValue()),
                     percent,
-                    "finished".equals(f[0]));
+                    "finished".equals(f[0]),
+                    vcodec.isEmpty() || "NA".equals(vcodec) || "none".equals(vcodec) ? null : vcodec);
         }
 
         /** yt-dlp writes the literal "NA" for anything it doesn't know yet. Speed and
@@ -713,6 +731,11 @@ public class YtDlpService {
                     ? String.format("%d:%02d:%02d", secs / 3600, (secs % 3600) / 60, secs % 60)
                     : String.format("%02d:%02d", secs / 60, secs % 60);
         }
+    }
+
+    /** yt-dlp names H.264 "avc1.…". Null is the audio stream or an unknown, never a reason to convert. */
+    static boolean needsH264Conversion(String vcodec) {
+        return vcodec != null && !vcodec.startsWith("avc1");
     }
 
     private void setPhase(Job job, JobStatus status, String phase, Consumer<Job> onUpdate) {
@@ -810,7 +833,7 @@ public class YtDlpService {
 
         String what = codecs.labelOf(codec);
         String prefix = total > 1 ? "Compressing " + idx + "/" + total + " to " + what : "Compressing to " + what;
-        boolean ok = runEncode(cmd, out, durationSec, prefix, job, onUpdate);
+        boolean ok = runEncode(cmd, out, durationSec, prefix, idx, total, job, onUpdate);
         if (job.isCanceled()) {
             return src;
         }
@@ -830,15 +853,18 @@ public class YtDlpService {
      * removed and false comes back, so the caller decides whether that is an error.
      */
     private boolean runEncode(List<String> cmd, Path out, double durationSec, String prefix,
-                              Job job, Consumer<Job> onUpdate) throws IOException, InterruptedException {
+                              int idx, int total, Job job, Consumer<Job> onUpdate)
+            throws IOException, InterruptedException {
         job.setStatus(JobStatus.COMPRESSING);
         job.setPhase(prefix + "…");
         job.setSpeedBps(null);
         job.setEta(null);
         job.setDownloadedBytes(null);
         job.setTotalBytes(null);
+        job.setConvert(true); // covers a conversion the first progress tick could not predict
         completeSourceTransfers(job);
-        job.setCurrentStep("FINALIZING");
+        job.setFinalizingProgress(100); // the merge, metadata and thumbnail were yt-dlp's, and are done
+        job.setCurrentStep("CONVERTING");
         onUpdate.accept(job);
         log.info("Job {} encoding: {}", job.getId(), String.join(" ", cmd));
 
@@ -868,8 +894,11 @@ public class YtDlpService {
                             int pct = (int) Math.min(100, Math.floor(us / 1_000_000.0 / durationSec * 100));
                             if (pct != last[0]) {
                                 last[0] = pct;
-                                job.setProgress(pct);
-                                job.setFinalizingProgress(pct);
+                                // Across a playlist's files the bar keeps climbing instead of
+                                // restarting at 0% for each one.
+                                int overall = (int) Math.floor(((idx - 1) + pct / 100.0) / total * 100);
+                                job.setProgress(overall);
+                                job.setConvertProgress(overall);
                                 job.setPhase(prefix + "… " + pct + "%");
                                 onUpdate.accept(job);
                             }
@@ -880,6 +909,9 @@ public class YtDlpService {
         }
 
         boolean ok = !job.isCanceled() && exit == 0 && Files.exists(out) && size(out) > 0;
+        if (ok) {
+            job.setConvertProgress((int) Math.floor(idx * 100.0 / total));
+        }
         if (!ok) {
             Files.deleteIfExists(out);
             if (!job.isCanceled()) {
@@ -952,7 +984,7 @@ public class YtDlpService {
             }
             cmd.addAll(List.of("-movflags", "+faststart", out.toString()));
 
-            if (runEncode(cmd, out, durationSec, prefix, job, onUpdate)) {
+            if (runEncode(cmd, out, durationSec, prefix, idx, total, job, onUpdate)) {
                 Files.move(out, src, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                 log.info("Job {} made universal: {}/{} → h264/aac", job.getId(), video, audio);
                 return src;

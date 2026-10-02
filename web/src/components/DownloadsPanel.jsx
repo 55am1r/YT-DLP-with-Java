@@ -7,11 +7,13 @@ import { GRACE_SECONDS } from '../autosave'
  * Clearing here only wipes this link's files on the server; other tabs keep theirs.
  */
 /**
- * Where finished files go. Lives here — not on each card — so it can be set before a
- * download starts, mid-download, and never gets in the way once one has finished.
+ * Where finished files from THIS tab go — every tab (one per link) has its own. Lives here,
+ * not on each card, so it can be set before a download starts, mid-download, and never
+ * gets in the way once one has finished.
  */
-function SaveTarget({ a }) {
-  const { folder, canPick, pick, allow, clear } = a
+function SaveTarget({ a, pageId }) {
+  const folder = a.folders[pageId]
+  const { canPick } = a
   return (
     <div className="save-target glass">
       <div className="save-target-text">
@@ -23,25 +25,25 @@ function SaveTarget({ a }) {
         </span>
       </div>
       <div className="save-target-actions">
-        {folder && !folder.granted && <button className="btn btn-sm btn-primary" onClick={allow}>Allow</button>}
-        {canPick && <button className="btn btn-sm" onClick={pick}>{folder ? 'Change' : 'Choose folder'}</button>}
+        {folder && !folder.granted && <button className="btn btn-sm btn-primary" onClick={() => a.allow(pageId)}>Allow</button>}
+        {canPick && <button className="btn btn-sm" onClick={() => a.pick(pageId)}>{folder ? 'Change' : 'Choose folder'}</button>}
         {folder && (
-          <button className="btn btn-sm btn-ghost" onClick={clear} aria-label="Go back to the Downloads folder" title="Go back to the Downloads folder">
+          <button className="btn btn-sm btn-ghost" onClick={() => a.clear(pageId)} aria-label="Go back to the Downloads folder" title="Go back to the Downloads folder">
             <i className="fa-solid fa-xmark" />
           </button>
         )}
       </div>
       <p className="save-target-hint">
         {folder
-          ? 'Finished files save here by themselves.'
-          : `Finished files save themselves after ${GRACE_SECONDS}s${canPick ? ' — or choose a folder to save the moment they’re ready.' : '.'}`}
+          ? 'Finished files from this tab save here by themselves.'
+          : `Finished files save themselves after ${GRACE_SECONDS}s${canPick ? ' — or choose a folder for this tab to save the moment they’re ready.' : '.'}`}
         {!canPick && (window.isSecureContext ? ' Choosing a folder needs Chrome or Edge.' : ' Choosing a folder needs the secure (https) link.')}
       </p>
     </div>
   )
 }
 
-export default function DownloadsPanel({ jobs, onClear, onExpired, onRetry, autosave, clearing }) {
+export default function DownloadsPanel({ jobs, pageId, onClear, onExpired, onRetry, autosave, clearing }) {
   const clearable = jobs.some((j) => ['COMPLETED', 'FAILED', 'CANCELED'].includes(j.status))
 
   return (
@@ -60,7 +62,7 @@ export default function DownloadsPanel({ jobs, onClear, onExpired, onRetry, auto
         </button>
       </div>
 
-      <SaveTarget a={autosave} />
+      <SaveTarget a={autosave} pageId={pageId} />
 
       {jobs.length === 0 ? (
         <div className="job glass job-empty">
@@ -72,7 +74,7 @@ export default function DownloadsPanel({ jobs, onClear, onExpired, onRetry, auto
         </div>
       ) : (
         jobs.map((j) => (
-          <JobCard key={j.id} job={j} onExpired={onExpired} onRetry={onRetry} autosave={autosave} />
+          <JobCard key={j.id} job={j} onExpired={onExpired} onRetry={onRetry} autosave={autosave} folder={autosave.folders[pageId]} />
         ))
       )}
     </section>
