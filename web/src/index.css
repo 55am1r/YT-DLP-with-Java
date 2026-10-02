@@ -44,6 +44,12 @@
   color-scheme: light;
 }
 
+@property --job-progress {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 0%;
+}
+
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
 
@@ -299,6 +305,10 @@ body {
 }
 .hero-empty { display: grid; place-items: center; width: 100%; height: 100%; font-size: 40px; color: var(--muted); }
 .media-head { padding: 14px 2px 4px; }
+.media-title-row { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.media-title-row .title { flex: 1 1 auto; min-width: 0; }
+.copy-link { flex: 0 0 auto; margin-top: 1px; }
+.copy-link.copied { color: var(--ok); border-color: rgba(46, 204, 113, 0.55); box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.11); }
 .title { font-size: 18px; margin: 0 0 4px; line-height: 1.3; }
 .tag {
   display: inline-block; margin-left: 8px; padding: 2px 8px; font-size: 11px; border-radius: 999px;
@@ -468,8 +478,8 @@ body {
    only needs to fit a compact card. min-width: 0 stops long titles from forcing the
    column wider than its share (a single long job title was ballooning the section
    right off the right edge because the flex child had no min-width to override). */
-.work-main { flex: 0 0 75%; min-width: 0; }
-.workspace-side { flex: 0 0 calc(25% - 22px); min-width: 0; }
+.work-main { flex: 0 0 68%; min-width: 0; }
+.workspace-side { flex: 0 0 calc(32% - 22px); min-width: 0; }
 .jobs { min-width: 0; container-type: inline-size; }
 /* Below this width there isn't enough room for two comfortable columns — the
    downloads column was either squeezed to nothing or stacked below with acres of
@@ -483,9 +493,20 @@ body {
 
 /* ---------- Downloads ---------- */
 .dl-head { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 12px; }
+
+/* Where finished files go. Wraps freely: the downloads column is only ~130px of content
+   at a 1000px window, so the text and buttons must stack rather than squeeze. */
+.save-target { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; padding: 11px 12px; margin: 0 0 12px; border-radius: 12px; font-size: 12.5px; }
+.save-target-text { display: flex; align-items: center; gap: 8px; flex: 1 1 110px; min-width: 0; color: var(--muted); }
+.save-target-text i { color: var(--accent-2); flex: 0 0 auto; }
+.save-target-text b { color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
+.save-target-warn { color: var(--warn); }
+.save-target-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.save-target .btn-sm { padding: 6px 11px; font-size: 12px; }
+.save-target-hint { flex: 1 0 100%; margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--muted); }
 .section-title { font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin: 0; }
 
-.job { border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
+.job { border-radius: 14px; padding: 16px; margin-bottom: 12px; }
 .job-done { border-color: rgba(46, 204, 113, 0.45); }
 .job-failed { border-color: rgba(225, 29, 42, 0.45); }
 /* Placeholder shown when a link has no downloads yet — shaped like a real card so the
@@ -496,7 +517,29 @@ body {
   font-size: 17px; color: var(--muted);
   background: var(--glass-bg); border: 1px solid var(--border-soft);
 }
-.job-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.job-summary { display: grid; grid-template-columns: 44px minmax(0, 1fr); column-gap: 11px; row-gap: 12px; min-width: 0; }
+.job-summary-main { flex: 1 1 auto; min-width: 0; }
+.overall-ring {
+  --job-progress: 0%;
+  width: 44px; height: 44px; padding: 4px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: conic-gradient(var(--accent) var(--job-progress), var(--bg-2) 0);
+  box-shadow: 0 0 0 1px var(--border-soft), 0 4px 12px rgba(0, 0, 0, 0.20);
+  transition: --job-progress 0.5s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease;
+}
+.overall-ring > span {
+  width: 100%; height: 100%; border-radius: 50%; display: grid; place-items: center;
+  background: var(--surface); color: var(--text); font-size: 10.5px; font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.overall-ring.done { background: conic-gradient(var(--ok) 100%, var(--ok) 0); box-shadow: 0 0 0 1px rgba(46, 204, 113, 0.48), 0 0 16px rgba(46, 204, 113, 0.22); }
+.overall-ring.done > span { color: var(--ok); }
+.overall-ring.bad { background: conic-gradient(var(--accent-2) var(--job-progress), rgba(225, 29, 42, 0.18) 0); }
+.overall-ring.bad > span { color: var(--accent-2); }
+.overall-ring.working { animation: overall-pulse 1.6s ease-in-out infinite; }
+@keyframes overall-pulse { 50% { box-shadow: 0 0 0 4px rgba(225, 29, 42, 0.10), 0 0 18px rgba(225, 29, 42, 0.24); } }
+
+.job-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 7px; }
 .job-title { font-size: 14.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status {
   font-size: 12px; color: var(--muted); flex-shrink: 0; padding: 3px 10px; border-radius: 999px;
@@ -505,31 +548,68 @@ body {
 .status.ok { color: var(--ok); border-color: rgba(46, 204, 113, 0.45); }
 .status.bad { color: var(--accent-2); border-color: rgba(225, 29, 42, 0.45); }
 
-.progress { height: 8px; background: var(--bg-2); border-radius: 999px; overflow: hidden; position: relative; }
-.bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 999px; transition: width 0.3s ease; }
-.progress.indet .bar-fill { width: 40% !important; position: absolute; animation: slide 1.2s ease-in-out infinite; }
-@keyframes slide { 0% { left: -40%; } 100% { left: 100%; } }
-.progress.paused .bar-fill { background: linear-gradient(90deg, #f5a623, #f7b955); }
-
-.job-info { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 9px; font-size: 12.5px; color: var(--muted); }
-.job-info b { color: var(--text); font-weight: 600; }
-/* The size, speed and ETA figures all tick several times a second; proportional digits
-   make them shimmy as glyph widths change under them. */
-.job-info, .job-foot .small { font-variant-numeric: tabular-nums; }
-.job-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
+.job-metrics { display: flex; align-items: baseline; justify-content: space-between; gap: 8px 14px; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.job-transfer { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job-transfer b, .job-rate { color: var(--text); font-weight: 600; }
+.job-rate { display: inline-flex; align-items: center; justify-content: flex-end; gap: 5px; flex-wrap: wrap; text-align: right; font-size: 12px; }
+.job-rate i { color: var(--muted); font-size: 0.9em; }
+.metric-divider { width: 3px; height: 3px; flex: 0 0 auto; border-radius: 50%; background: var(--muted); opacity: 0.7; }
+.job-note { margin-top: 7px; font-size: 12px; color: var(--muted); }
+.job-error-note { color: #ff8f97; }
+.autosave-note { font-variant-numeric: tabular-nums; }
+.autosave-note b { color: var(--text); font-weight: 600; }
+.autosave-note i { margin-right: 2px; }
+.autosave-note.ok, .autosave-note.ok i { color: var(--ok); }
+.job-toolbar { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 9px; flex-wrap: wrap; }
+.job-details-toggle { min-width: 0; margin-right: auto; }
 .job-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-
-/* Pause + Cancel are a rigid 149px (flex-shrink: 0, no wrap), so the foot cannot lay out
-   as a row in a column narrower than ~300px — the buttons overflow the card and hang
-   outside the glass border. That stacking rule used to live in a max-width: 640px
-   VIEWPORT query, which the downloads column never matches: at a 1001px window the card
-   is 128px wide, at 1440px it is 214px. Keying it to the card's own width fixes the
-   desktop column and keeps the phone behaviour identical. */
-@container (max-width: 300px) {
-  .job-foot { flex-direction: column; align-items: stretch; gap: 10px; }
-  .job-actions { justify-content: flex-end; flex-wrap: wrap; }
+.job-details { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.42s cubic-bezier(0.22, 1, 0.36, 1), margin-top 0.42s ease; }
+.job-expanded .job-details { grid-template-rows: 1fr; margin-top: 16px; }
+.job-details-inner { min-height: 0; overflow: hidden; }
+.download-detail { padding-top: 14px; border-top: 1px solid var(--border-soft); }
+.steps-timeline { --timeline-progress: 0%; position: relative; display: flex; align-items: center; justify-content: space-between; padding: 0 2px; }
+.steps-timeline::before, .steps-timeline::after { content: ''; position: absolute; top: 13px; left: 15px; right: 15px; height: 2px; border-radius: 999px; }
+.steps-timeline::before { background: var(--border); }
+.steps-timeline::after {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--ok), var(--accent));
+  background-size: 200% 100%; clip-path: inset(0 calc(100% - var(--timeline-progress)) 0 0);
+  animation: timeline-flow 2.4s linear infinite;
 }
-.small { font-size: 12.5px; }
+.steps-timeline.complete::after { background-image: linear-gradient(90deg, #159957, var(--ok), #8df0b4, var(--ok)); }
+@keyframes timeline-flow { to { background-position: -200% 0; } }
+.timeline-step { position: relative; z-index: 1; display: grid; place-items: center; }
+.step-marker { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); background: var(--surface); border: 2px solid var(--border); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); transition: all 0.34s cubic-bezier(0.22, 1, 0.36, 1); }
+.step-marker i { font-size: 11px; line-height: 1; }
+.timeline-step.active .step-marker { background: var(--accent); border-color: var(--accent-2); box-shadow: 0 0 0 4px rgba(225, 29, 42, 0.12); animation: step-pulse 1.6s ease-in-out infinite; }
+.timeline-step.done .step-marker { color: #fff; background: var(--ok); border-color: var(--ok); box-shadow: 0 0 0 4px rgba(46, 204, 113, 0.10); animation: step-complete 0.42s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes step-pulse { 50% { box-shadow: 0 0 0 8px rgba(225, 29, 42, 0.05); } }
+@keyframes step-complete { from { transform: scale(0.72); } to { transform: scale(1); } }
+.download-stage-list { display: grid; gap: 12px; padding: 15px 0 0; margin: 0; list-style: none; }
+.download-stage { display: grid; grid-template-columns: minmax(150px, 0.72fr) minmax(0, 1.28fr); align-items: center; gap: 16px; }
+.stage-label { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 12.5px; }
+.stage-label b { color: var(--muted); flex: 0 0 auto; font-size: 11px; font-variant-numeric: tabular-nums; }
+.download-stage.active .stage-label span, .download-stage.active .stage-label b { color: var(--text); }
+.download-stage.done .stage-label span, .download-stage.done .stage-label b { color: var(--ok); }
+.step-progress { height: 5px; position: relative; overflow: hidden; margin-top: 7px; border-radius: 999px; background: var(--bg-2); }
+.download-stage .step-progress { margin-top: 0; }
+.step-progress-fill { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
+.download-stage.done .step-progress-fill { width: 100% !important; background: var(--ok); }
+.step-progress.indeterminate .step-progress-fill { position: absolute; width: 42% !important; animation: stage-slide 1.15s ease-in-out infinite; }
+@keyframes stage-slide { from { left: -42%; } to { left: 100%; } }
+.download-detail-note { max-width: 680px; margin: 15px auto 0; color: var(--muted); font-size: 11px; line-height: 1.45; text-align: center; }
+
+/* The detailed card remains useful in the narrow desktop column and the mobile sheet. */
+@container (max-width: 400px) {
+  .job-summary { grid-template-columns: 40px minmax(0, 1fr); column-gap: 9px; }
+  .overall-ring { width: 40px; height: 40px; }
+  .job-metrics { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .job-rate { justify-content: flex-start; text-align: left; }
+  .job-toolbar { gap: 8px; }
+  .job-actions { justify-content: flex-end; flex-wrap: wrap; }
+  .download-stage { grid-template-columns: 1fr; gap: 6px; }
+  .stage-label { font-size: 12px; }
+  .download-detail-note { font-size: 10.5px; }
+}
 .expiry { font-size: 12px; color: var(--warn); }
 
 /* ---------- Login ---------- */

@@ -9,6 +9,7 @@ import ConfirmDialog from './components/ConfirmDialog'
 import ScrollFab from './components/ScrollFab'
 import Login from './components/Login'
 import { analyze, startJob, checkAuth, clearJobs, getCodecs, retryJob, fileAvailable, logout as apiLogout } from './api'
+import { useAutoSave } from './autosave'
 
 let seq = 0
 const STORE_KEY = 'ez-session-v1'
@@ -235,6 +236,7 @@ export default function App() {
   }
 
   async function onStart(pageId, request, force = false) {
+    autosave.ensureAccess() // this click is the one chance to re-ask for a forgotten folder
     setError(null)
     try {
       const res = await startJob(request, force)
@@ -253,6 +255,7 @@ export default function App() {
    * a fresh job with the exact settings the original used.
    */
   async function retry(pageId, job) {
+    autosave.ensureAccess()
     try {
       const resumed = await retryJob(job.id)
       if (resumed) {
@@ -280,6 +283,10 @@ export default function App() {
   const markSaved = useCallback((jobId) => {
     setPages((prev) => prev.map((p) => ({ ...p, jobs: p.jobs.map((j) => (j.id === jobId ? { ...j, saved: true } : j)) })))
   }, [])
+
+  // Finished files save themselves (see autosave.js). Takes every tab's jobs, not just the
+  // visible one, so a download that finishes in a background tab is still saved.
+  const autosave = useAutoSave({ jobs: pages.flatMap((p) => p.jobs), enabled: !!authed, markSaved })
 
   /** Do the actual server-side clear, without confirmation. */
   async function doClear(pageId) {
@@ -405,7 +412,7 @@ export default function App() {
                 onClear={onClear}
                 onExpired={onExpired}
                 onRetry={(job) => retry(active.id, job)}
-                onSaved={markSaved}
+                autosave={autosave}
                 clearing={clearing}
               />
             </div>
@@ -447,7 +454,7 @@ export default function App() {
                 onClear={onClear}
                 onExpired={onExpired}
                 onRetry={(job) => retry(active.id, job)}
-                onSaved={markSaved}
+                autosave={autosave}
                 clearing={clearing}
               />
             </div>

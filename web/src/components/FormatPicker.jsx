@@ -22,7 +22,8 @@ function Badge({ text }) {
 /**
  * The Auto / Advanced switch that sits between picking video and picking a resolution.
  *
- *   Auto      → MP4, no re-encode. Exactly what the app did before this existed.
+ *   Auto      → MP4 (H.264 + AAC) that opens in QuickTime and every editor. Converted
+ *               only above 1080p, where YouTube has no H.264 to give.
  *   Advanced  → container, then compression model.
  *
  * Used unchanged for the single-video panel and for each ticked playlist item, so the
@@ -68,7 +69,7 @@ export default function FormatPicker({ value, codecs, onChange, compact = false 
         </div>
         {mode === 'auto' && (
           <p className="hint-line">
-            <i className="fa-regular fa-circle-check" /> MP4, original quality — nothing re-encoded
+            <i className="fa-regular fa-circle-check" /> MP4 that opens in QuickTime, Premiere and every editor
           </p>
         )}
       </div>

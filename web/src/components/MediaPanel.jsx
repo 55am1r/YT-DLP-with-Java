@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import TrimSlider from './TrimSlider'
 import FormatPicker, { defaultFormat } from './FormatPicker'
 import DownloadButton from './DownloadButton'
+import CopyLinkButton from './CopyLinkButton'
 import { fmtDuration, fmtSize, parseUrlTimestamp } from '../utils'
 
 const AUDIO_FORMATS = ['mp3', 'm4a', 'opus', 'wav']
@@ -74,6 +75,7 @@ export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refre
       height: isAudio ? null : activeHeight,
       container: isAudio ? null : format.container,
       codec: isAudio ? null : format.codec,
+      universal: !isAudio && format.mode === 'auto',
       audioFormat: isAudio ? audioFormat : null,
       playlist: false,
       title: analysis.title,
@@ -102,7 +104,10 @@ export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refre
       </div>
 
       <div className="media-head">
-        <h2 className="title">{analysis.title || 'Untitled'}</h2>
+        <div className="media-title-row">
+          <h2 className="title">{analysis.title || 'Untitled'}</h2>
+          <CopyLinkButton url={analysis.url} />
+        </div>
         <p className="muted">
           {analysis.uploader}
           {analysis.durationSeconds != null && <span> · {fmtDuration(analysis.durationSeconds)}</span>}
