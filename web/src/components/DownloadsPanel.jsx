@@ -15,8 +15,8 @@ function AutoSaveSwitch({ a }) {
       className={`switch${a.on ? ' on' : ''}`}
       onClick={() => a.setOn(!a.on)}
       title={a.on
-        ? `Auto-save is on. Each finished download saves itself — into the folder you choose on its card, or into your Downloads folder after ${GRACE_SECONDS}s.`
-        : 'Auto-save is off. Press Save file on each download.'}
+        ? `Auto-save is on. Each finished download is written straight into its folder.${a.fallback ? ' No folder is set, so files are handed to your browser instead.' : ''}`
+        : `Auto-save is off. Press Save file on each download. Turning it on asks once for a folder, so nothing prompts you later.`}
     >
       <span className="switch-track"><span className="switch-knob" /></span>
       <span>Auto-save</span>
@@ -51,11 +51,19 @@ export default function DownloadsPanel({ jobs, onClear, onExpired, onRetry, auto
         </div>
       </div>
 
-      {/* Where a folder can't be chosen there is no per-card control to explain it, so say so once. */}
+      {/* Without a folder nothing can be written silently — the browser's own downloader
+          takes over, and it may ask where to put each file. Say so once, here, rather than
+          on every card. */}
       {autosave.on && !autosave.canPick && (
         <p className="dl-hint">
-          Finished files save to your Downloads folder {GRACE_SECONDS}s after they finish.
-          {window.isSecureContext ? ' Choosing a folder needs Chrome or Edge.' : ' Choosing a folder needs the secure (https) link.'}
+          Finished files go to your browser {GRACE_SECONDS}s after they finish, and it may ask where to save each one.
+          {window.isSecureContext ? ' Saving without a prompt needs Chrome or Edge.' : ' Saving without a prompt needs the secure (https) link.'}
+        </p>
+      )}
+      {autosave.on && autosave.canPick && autosave.fallback && (
+        <p className="dl-hint">
+          <i className="fa-solid fa-triangle-exclamation" /> No folder chosen, so finished files are handed to your
+          browser — which may ask where to save each one. Choose a folder on any download below to save silently.
         </p>
       )}
 
