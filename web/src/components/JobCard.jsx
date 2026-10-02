@@ -84,7 +84,7 @@ function SaveNote({ s, folder }) {
   if (s.phase === 'wait') {
     return (
       <div className="job-note autosave-note">
-        <i className="fa-regular fa-clock" /> Saving to your Downloads folder in <Secs to={s.deadline} />
+        <i className="fa-regular fa-clock" /> Sending to your browser in <Secs to={s.deadline} />
         {folder && !folder.granted && <> — or press <b>Allow</b> to use <b>{folder.name}</b></>}
       </div>
     )
@@ -100,12 +100,24 @@ function SaveNote({ s, folder }) {
   if (s.phase === 'saved') {
     return (
       <div className="job-note autosave-note ok">
-        <i className="fa-solid fa-check" />{' '}
-        {s.fallbackFrom
-          ? <>Couldn’t use <b>{s.fallbackFrom}</b> — saved to your Downloads folder instead</>
-          : <>Saved to <b>{s.where || 'your Downloads folder'}</b></>}
+        <i className="fa-solid fa-check" /> Saved to <b>{s.where}</b>
       </div>
     )
+  }
+  // Handed to the browser's downloader, which never reports back — so this says what was
+  // actually done, not that the file arrived. It may still be sitting in a Save As dialog.
+  if (s.phase === 'handed') {
+    return (
+      <div className="job-note autosave-note">
+        <i className="fa-solid fa-arrow-right-from-bracket" />{' '}
+        {s.fallbackFrom
+          ? <>Couldn’t write to <b>{s.fallbackFrom}</b> — sent to your browser instead</>
+          : <>Sent to your browser — check its downloads</>}
+      </div>
+    )
+  }
+  if (s.phase === 'elsewhere') {
+    return <div className="job-note autosave-note"><i className="fa-solid fa-check" /> Saved from another tab</div>
   }
   return (
     <div className="job-note job-error-note">
@@ -175,7 +187,8 @@ export default function JobCard({ job, onExpired, onRetry, autosave }) {
   // This download's own folder. Only meaningful while Auto-save is on; off, the card is a
   // plain Save file card again.
   const autoOn = autosave.on
-  const folder = autoOn ? autosave.folders[job.id] : undefined
+  const folder = autoOn ? autosave.folderFor(job.id) : undefined
+  const ownFolder = autoOn ? autosave.folders[job.id] : undefined // set on this card, not inherited
   const hasFolder = !!folder
   const saveState = autosave.state[job.id]
   // The choice only matters until the file starts to save, so it shows while the download
@@ -268,13 +281,13 @@ export default function JobCard({ job, onExpired, onRetry, autosave }) {
               <button className="btn btn-sm" type="button" onClick={() => autosave.pick(job.id)}>
                 {folder ? 'Change' : 'Choose folder'}
               </button>
-              {folder && (
+              {ownFolder && (
                 <button
                   className="btn btn-sm btn-ghost"
                   type="button"
                   onClick={() => autosave.clear(job.id)}
-                  aria-label="Use the Downloads folder instead"
-                  title="Use the Downloads folder instead"
+                  aria-label="Use the Auto-save folder instead"
+                  title={autosave.defaultFolder ? `Use ${autosave.defaultFolder.name} instead` : 'Use the Downloads folder instead'}
                 >
                   <i className="fa-solid fa-xmark" />
                 </button>

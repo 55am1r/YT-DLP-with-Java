@@ -495,6 +495,7 @@ body {
 .dl-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin: 0 2px 12px; }
 .dl-head-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 14px; margin-left: auto; }
 .dl-hint { margin: -4px 2px 12px; font-size: 11.5px; line-height: 1.45; color: var(--muted); }
+.dl-hint i { color: var(--warn); margin-right: 4px; }
 
 /* The Auto-save switch beside Clear. A real <button role="switch">, so it is keyboard- and screen-reader-friendly. */
 .switch { display: inline-flex; align-items: center; gap: 8px; padding: 0; border: 0; background: none; font: inherit; font-size: 12.5px; color: var(--muted); cursor: pointer; }

@@ -129,19 +129,19 @@ finishes in minutes rather than hours and the CPU stays free for other jobs.
 - **Always-visible section.** The Downloads area and its Clear button are shown at all
   times, with a "no downloads yet" placeholder when empty.
 - **Auto-save.** A finished file can save itself, so nobody has to come back and press *Save
-  file*. A switch next to *Clear* in the Downloads panel turns it on or off (on by default,
-  remembered per browser). With it **on**, every download card has its own folder choice —
-  Chrome or Edge, https or localhost only. A card with a folder writes its file there the
-  moment it is ready, with no countdown, and its *Save file* button is greyed out because
-  there is nothing left to do. A card without one saves into the browser's Downloads folder
-  30 seconds after it finishes; pressing *Save file* or choosing a folder inside that window
-  acts immediately. With the switch **off** nothing saves by itself and every card is a plain
-  *Save file* card. Saves run side by side (up to four at once — it's the user's own disk,
-  unlike the server's download queue) and any beyond that wait their turn. It runs in the
-  browser, so the tab must be open — a file nobody saved stays on the server for its normal
-  two hours. Chrome withdraws a chosen folder's permission between visits, and the card then
-  offers *Allow*. Chrome may also ask once to allow multiple automatic downloads; Safari and
-  Firefox always use their own Downloads folder.
+  file*. A switch next to *Clear* turns it on or off (remembered per browser). Turning it
+  **on** asks once for a folder — that single answer is what makes everything after it
+  silent, because a web page can only write a file without a dialog through a folder it has
+  been granted. Every download then writes straight into that folder the moment it is ready,
+  with no countdown and no prompt, and its *Save file* button is greyed out. Each download
+  card can point at a different folder if you want (*Change*), and *✕* puts it back on the
+  shared one. Needs Chrome or Edge on https or localhost.
+  If no folder is chosen, files are instead handed to the browser's own downloader after
+  30s — which **may ask where to save each one** (Chrome's *Ask where to save each file
+  before downloading*), and which never reports back, so those cards say "Sent to your
+  browser" rather than claiming a save that cannot be confirmed. Saves run side by side (up
+  to four at once) and the rest wait their turn. It runs in the browser, so the tab must be
+  open; a file nobody saved stays on the server for its normal two hours.
 - **Automatic cleanup.** Finished files carry a visible countdown and are deleted on
   a TTL, so the disk doesn't silently fill.
 
