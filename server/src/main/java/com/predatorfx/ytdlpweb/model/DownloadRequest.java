@@ -17,6 +17,9 @@ import java.util.List;
  * @param items        optional 1-based playlist item numbers to download (multi-select)
  * @param codec        compression choice from the Advanced tab; "none" keeps the source
  *                     streams untouched, which is what the Auto tab always sends
+ * @param universal    set by the Auto tab: the finished MP4 must open in QuickTime and every
+ *                     editor (H.264 + AAC). The Advanced tab's "Original" leaves it false,
+ *                     because there the user has asked for the streams exactly as served.
  */
 public record DownloadRequest(
         String url,
@@ -29,7 +32,8 @@ public record DownloadRequest(
         String startTime,
         String endTime,
         List<Integer> items,
-        String codec) {
+        String codec,
+        boolean universal) {
 
     public boolean isAudio() {
         return kind == null || kind.equalsIgnoreCase("audio");
@@ -56,6 +60,11 @@ public record DownloadRequest(
         return isAudio() ? audioFormatOrDefault() : containerOrDefault();
     }
 
+    /** Auto-mode video that has to play everywhere. Only MP4 — Auto never sends another. */
+    public boolean wantsUniversal() {
+        return universal && !isAudio() && "mp4".equals(containerOrDefault());
+    }
+
     public boolean hasClipRange() {
         return (startTime != null && !startTime.isBlank()) || (endTime != null && !endTime.isBlank());
     }
@@ -79,6 +88,7 @@ public record DownloadRequest(
                 isAudio() ? audioFormatOrDefault() : String.valueOf(heightOrDefault()),
                 isAudio() ? "" : containerOrDefault(),
                 isAudio() ? "" : codecOrDefault(),
+                wantsUniversal() ? "universal" : "",
                 String.valueOf(playlist()),
                 sel,
                 startTime() == null ? "" : startTime().trim(),

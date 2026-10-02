@@ -45,10 +45,12 @@ public class CodecCatalog {
     private String ffmpegBin;
 
     private final Map<String, Spec> specs = new LinkedHashMap<>();
+    private boolean hasX264;
 
     @PostConstruct
     void init() {
         String encoders = probeEncoders();
+        hasX264 = encoders.contains("libx264");
 
         // Always available — this is the current behaviour: merge, never re-encode.
         add(new Spec(new CodecOption(NONE, "Original",
@@ -143,6 +145,35 @@ public class CodecCatalog {
             log.warn("Could not list ffmpeg encoders ({}) — offering no-re-encode only", e.toString());
             return "";
         }
+    }
+
+    /**
+     * H.264 encoder arguments for the Auto-mode "plays everywhere" conversion, best first:
+     * the hardware encoder when there is one, then libx264. Each list is a complete
+     * "-c:v …" fragment; the caller tries them in order and keeps the first that works.
+     *
+     * Quality-first, unlike the Advanced tab's size-saving targets. The source is VP9 or
+     * AV1, which beat H.264 by roughly half, so matching them takes about twice the
+     * bitrate — aiming lower would visibly soften a file people are about to edit.
+     */
+    public List<List<String>> universalH264(long sourceKbps) {
+        List<List<String>> out = new ArrayList<>();
+        Spec hw = specs.get("h264");
+        if (hw != null) {
+            List<String> a = new ArrayList<>(List.of("-c:v", hw.encoder(), "-profile:v:0", "high"));
+            if (sourceKbps > 0) {
+                long target = Math.max(2500, sourceKbps * 2);
+                a.addAll(List.of("-b:v", target + "k",
+                        "-maxrate", Math.round(target * 1.5) + "k", "-bufsize", (target * 3) + "k"));
+            } else if (hw.encoder().contains("videotoolbox")) {
+                a.addAll(List.of("-q:v", "70"));
+            }
+            out.add(a);
+        }
+        if (hasX264) {
+            out.add(List.of("-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-profile:v:0", "high"));
+        }
+        return out;
     }
 
     public List<CodecOption> options() {

@@ -56,11 +56,17 @@ break whenever YouTube changes something. This build removes those constraints:
 Every format choice — globally and for each playlist item — follows the same shape:
 
 ```
-Video ─┬─ Auto      → MP4, original quality         → resolution → download
+Video ─┬─ Auto      → MP4 (H.264 + AAC), plays anywhere → resolution → download
        └─ Advanced  → container → compression model → resolution → download
 ```
 
-- **Auto** is MP4 with no re-encoding: fastest, and nothing is lost.
+- **Auto** is an MP4 that opens in QuickTime, Premiere, Final Cut and DaVinci. Up to
+  1080p YouTube serves H.264 + AAC, which is taken as-is — no re-encode. Above that
+  YouTube only has VP9/AV1 (and Opus audio), which Premiere cannot decode and QuickTime
+  will not play, so the video is converted to H.264 at roughly twice the source bitrate
+  on the hardware encoder. That costs a little time and file size; it is the price of a
+  file every editor accepts. Pick **Advanced → Original** to keep YouTube's streams
+  untouched.
 - **Advanced** exposes the container (MP4 / MKV / WEBM) and the compression model.
 
 ### Compression models
@@ -76,6 +82,12 @@ offered inside WEBM, because WEBM cannot store it.
 | **H.264 / AVC** | 80–90% | Maximum compatibility — older phones, TVs, editing suites. |
 | **AV1** | 40–55% | *Best savings.* Software-encoded, so noticeably slower. |
 | **VP9** | ~100% | For players that require VP9; does not shrink YouTube sources. |
+
+Inside an **MP4**, every compression model also carries **AAC audio** — YouTube's own AAC
+stream is fetched, so nothing is converted. YouTube's default audio is Opus, which
+Premiere does not reliably read from an MP4 (the usual cause of a picture with no sound);
+if a video has no AAC to offer, the audio is converted in the same ffmpeg pass that
+encodes the video. MKV and WEBM keep Opus, and **Original** keeps whatever YouTube sent.
 
 Every figure above was **measured on real downloads**, not taken from codec
 marketing. This matters: YouTube already ships efficient AV1/VP9, so a quality-based
@@ -113,6 +125,15 @@ finishes in minutes rather than hours and the CPU stays free for other jobs.
   offers a one-click retry that re-runs with the exact original settings.
 - **Always-visible section.** The Downloads area and its Clear button are shown at all
   times, with a "no downloads yet" placeholder when empty.
+- **Auto-save.** A finished file saves itself, so nobody has to come back and press *Save
+  file*. Choose a folder in the Downloads panel (Chrome or Edge, https or localhost only) and
+  files are written there the moment they're ready, with no countdown. With no folder chosen
+  a file lands in the browser's Downloads folder 30 seconds after it finishes; pressing
+  *Save file* or choosing a folder inside that window acts immediately. It runs in the
+  browser, so the tab must be open — a file nobody saved stays on the server for its normal
+  two hours. Chrome withdraws a chosen folder's permission between visits, so the app re-asks
+  on the next *Download* click; Chrome may also ask once to allow multiple automatic
+  downloads. Safari and Firefox always use their own Downloads folder.
 - **Automatic cleanup.** Finished files carry a visible countdown and are deleted on
   a TTL, so the disk doesn't silently fill.
 
@@ -134,6 +155,10 @@ finishes in minutes rather than hours and the CPU stays free for other jobs.
 - **yt-dlp freshness guard.** The server compares its installed version against the
   latest release and runs `brew upgrade` when behind. This runs in the background and
   never blocks a download.
+- **Restarting wipes downloads in progress.** On startup the server deletes everything in
+  its work folder, so `restart.sh` (or a crash, or a second copy of the app pointed at the
+  same folder) destroys any download still running — the files cannot be recovered. Restart
+  only when the Downloads list is empty.
 - **Concurrency cap.** A bounded worker pool with a queue; the limit is configurable.
 - **Transfer retries.** Fragment and extractor retries, added after testing showed
   YouTube intermittently dropping fragments under parallel load — failures that

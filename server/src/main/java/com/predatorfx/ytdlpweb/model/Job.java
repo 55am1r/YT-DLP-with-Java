@@ -30,6 +30,14 @@ public class Job {
     private volatile Long totalBytes;           // that stream's size; null when unknown
     private volatile String eta;                // e.g. "00:42"
 
+    // The detailed progress view is deliberately a separate model from the overall
+    // job percentage. yt-dlp downloads video and audio as distinct streams, then
+    // hands the file to ffmpeg; exposing those three pieces keeps the UI truthful.
+    private volatile int primaryProgress;
+    private volatile int secondaryProgress;
+    private volatile int finalizingProgress;
+    private volatile String currentStep = "PRIMARY";
+
     // Set once the file is ready — what the UI shows on a finished card
     private volatile String container;          // actual extension, e.g. "mp4"
     private volatile Integer height;            // real video height, null for audio
@@ -70,6 +78,10 @@ public class Job {
     public Long getDownloadedBytes() { return downloadedBytes; }
     public Long getTotalBytes() { return totalBytes; }
     public String getEta() { return eta; }
+    public int getPrimaryProgress() { return primaryProgress; }
+    public int getSecondaryProgress() { return secondaryProgress; }
+    public int getFinalizingProgress() { return finalizingProgress; }
+    public String getCurrentStep() { return currentStep; }
     public String getContainer() { return container; }
     public Integer getHeight() { return height; }
     public String getQualityLabel() { return qualityLabel; }
@@ -95,6 +107,10 @@ public class Job {
     public void setDownloadedBytes(Long downloadedBytes) { this.downloadedBytes = downloadedBytes; }
     public void setTotalBytes(Long totalBytes) { this.totalBytes = totalBytes; }
     public void setEta(String eta) { this.eta = eta; }
+    public void setPrimaryProgress(int primaryProgress) { this.primaryProgress = clampProgress(primaryProgress); }
+    public void setSecondaryProgress(int secondaryProgress) { this.secondaryProgress = clampProgress(secondaryProgress); }
+    public void setFinalizingProgress(int finalizingProgress) { this.finalizingProgress = clampProgress(finalizingProgress); }
+    public void setCurrentStep(String currentStep) { this.currentStep = currentStep; }
     public void setContainer(String container) { this.container = container; }
     public void setHeight(Integer height) { this.height = height; }
     public void setQualityLabel(String qualityLabel) { this.qualityLabel = qualityLabel; }
@@ -108,4 +124,8 @@ public class Job {
     @JsonIgnore
     public boolean isCanceled() { return canceled; }
     public void setCanceled(boolean canceled) { this.canceled = canceled; }
+
+    private static int clampProgress(int value) {
+        return Math.max(0, Math.min(100, value));
+    }
 }

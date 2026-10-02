@@ -186,6 +186,10 @@ public class JobService {
         job.setEta(null);
         job.setDownloadedBytes(null);
         job.setTotalBytes(null);
+        job.setPrimaryProgress(0);
+        job.setSecondaryProgress(0);
+        job.setFinalizingProgress(0);
+        job.setCurrentStep("PRIMARY");
         job.setFinishedAt(null);
         job.setExpiresAt(null);
         job.setFilePath(null);

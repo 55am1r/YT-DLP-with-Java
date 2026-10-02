@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { analyze, getPlaylistFormats } from '../api'
 import FormatPicker, { defaultFormat } from './FormatPicker'
 import DownloadButton from './DownloadButton'
+import CopyLinkButton from './CopyLinkButton'
 import { fmtDuration } from '../utils'
 
 const AUDIO_FORMATS = ['mp3', 'm4a', 'opus', 'wav']
@@ -126,6 +127,7 @@ export default function PlaylistPanel({ analysis, onStart, codecs, config, onCon
         height: sharedAudio ? null : height,
         container: sharedAudio ? null : format.container,
         codec: sharedAudio ? null : format.codec,
+        universal: !sharedAudio && format.mode === 'auto',
         audioFormat: sharedAudio ? audioFormat : null,
         playlist: true,
         title: analysis.title,
@@ -143,6 +145,7 @@ export default function PlaylistPanel({ analysis, onStart, codecs, config, onCon
         height: itemAudio ? null : cfg.height,
         container: itemAudio ? null : cfg.format.container,
         codec: itemAudio ? null : cfg.format.codec,
+        universal: !itemAudio && cfg.format.mode === 'auto',
         audioFormat: itemAudio ? cfg.audioFormat : null,
         playlist: false,
         title: item.title,
@@ -163,7 +166,10 @@ export default function PlaylistPanel({ analysis, onStart, codecs, config, onCon
           />
         )}
         <div style={{ minWidth: 0 }}>
-          <h2 className="title">{analysis.title || 'Playlist'}</h2>
+          <div className="media-title-row">
+            <h2 className="title">{analysis.title || 'Playlist'}</h2>
+            <CopyLinkButton url={analysis.url} />
+          </div>
           <p className="muted">
             {analysis.uploader} · Playlist · {count} {count === 1 ? 'video' : 'videos'}
             {audioOnly && <span className="tag">music</span>}

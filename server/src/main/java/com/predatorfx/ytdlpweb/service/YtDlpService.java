@@ -397,15 +397,22 @@ public class YtDlpService {
             throw new IOException("Download finished but no media file was produced");
         }
 
-        // Advanced tab only: re-encode to the requested codec. Auto always sends "none",
-        // which skips this entirely and keeps today's lossless behaviour.
-        if (!req.isAudio() && codecs.isReencode(req.codecOrDefault())) {
+        // Advanced tab: re-encode to the codec the user picked. Auto (wantsUniversal): only
+        // when YouTube had no H.264 at that resolution, so the file still opens everywhere.
+        boolean advanced = !req.isAudio() && codecs.isReencode(req.codecOrDefault());
+        if (advanced || req.wantsUniversal()) {
             for (int i = 0; i < produced.size(); i++) {
                 if (job.isCanceled()) {
                     finishCanceled(job, jobDir, onUpdate);
                     return;
                 }
-                produced.set(i, compress(produced.get(i), req, job, i + 1, produced.size(), onUpdate));
+                produced.set(i, advanced
+                        ? compress(produced.get(i), req, job, i + 1, produced.size(), onUpdate)
+                        : makeUniversal(produced.get(i), job, i + 1, produced.size(), onUpdate));
+            }
+            if (job.isCanceled()) {
+                finishCanceled(job, jobDir, onUpdate);
+                return;
             }
         }
 
@@ -413,6 +420,8 @@ public class YtDlpService {
         if (!req.playlist() || produced.size() == 1) {
             deliver = produced.stream().max(Comparator.comparingLong(YtDlpService::size)).orElseThrow();
         } else {
+            completeSourceTransfers(job);
+            job.setCurrentStep("FINALIZING");
             job.setStatus(JobStatus.PACKAGING);
             job.setPhase("Packaging " + produced.size() + " files into a zip…");
             onUpdate.accept(job);
@@ -443,6 +452,10 @@ public class YtDlpService {
         job.setEta(null);
         job.setDownloadedBytes(null);
         job.setTotalBytes(null);
+        job.setPrimaryProgress(100);
+        job.setSecondaryProgress(100);
+        job.setFinalizingProgress(100);
+        job.setCurrentStep("FINALIZING");
         job.setProgress(100);
         job.setStatus(JobStatus.COMPLETED);
         job.setPhase("Ready to download");
@@ -512,8 +525,28 @@ public class YtDlpService {
             cmd.add("0");
         } else {
             int h = req.heightOrDefault();
-            cmd.add("-f");
-            cmd.add(formatSelector(h, req.containerOrDefault()));
+            if (req.wantsUniversal()) {
+                // Highest resolution up to h; among equals prefer H.264, and AAC audio.
+                // YouTube's default pick is AV1/VP9 + Opus, which Premiere and QuickTime
+                // refuse inside an MP4. A sort (not a filter) so a 4K request is never
+                // quietly downgraded to the 1080p that happens to be H.264 — whatever
+                // can't be had in H.264 is converted afterwards by makeUniversal().
+                cmd.add("-S");
+                cmd.add("res,vcodec:h264,acodec:aac");
+                cmd.add("-f");
+                cmd.add("bv[height<=" + h + "]+ba/b[height<=" + h + "]/b");
+            } else {
+                if ("mp4".equals(req.containerOrDefault()) && codecs.isReencode(req.codecOrDefault())) {
+                    // The video is about to be re-encoded, but the audio is carried over as it
+                    // came. Left alone that is Opus, and an Opus track inside an MP4 is what
+                    // Premiere opens silent. Prefer YouTube's own AAC stream so there is nothing
+                    // to convert; the sort only ranks audio, so the video pick is unchanged.
+                    cmd.add("-S");
+                    cmd.add("acodec:aac");
+                }
+                cmd.add("-f");
+                cmd.add(formatSelector(h, req.containerOrDefault()));
+            }
             cmd.add("--merge-output-format");
             cmd.add(req.containerOrDefault());
         }
@@ -552,21 +585,36 @@ public class YtDlpService {
         if (it.find()) {
             job.setPlaylistIndex(Integer.parseInt(it.group(1)));
             job.setPlaylistCount(Integer.parseInt(it.group(2)));
+            job.setPrimaryProgress(0);
+            job.setSecondaryProgress(0);
+            job.setFinalizingProgress(0);
+            job.setCurrentStep("PRIMARY");
         }
 
         if (line.contains("[Merger]") || line.contains("Merging formats")) {
+            completeSourceTransfers(job);
+            job.setCurrentStep("FINALIZING");
+            advanceFinalizing(job, 10);
             setPhase(job, JobStatus.PROCESSING, "Merging video + audio…", onUpdate);
             return;
         }
         if (line.contains("[ExtractAudio]")) {
+            job.setPrimaryProgress(100);
+            job.setCurrentStep("SECONDARY");
             setPhase(job, JobStatus.PROCESSING, "Extracting audio…", onUpdate);
             return;
         }
         if (line.contains("[EmbedThumbnail]")) {
+            completeSourceTransfers(job);
+            job.setCurrentStep("FINALIZING");
+            advanceFinalizing(job, 70);
             setPhase(job, JobStatus.PROCESSING, "Embedding thumbnail…", onUpdate);
             return;
         }
         if (line.contains("[Metadata]") || line.contains("EmbedMetadata")) {
+            completeSourceTransfers(job);
+            job.setCurrentStep("FINALIZING");
+            advanceFinalizing(job, 85);
             setPhase(job, JobStatus.PROCESSING, "Writing metadata…", onUpdate);
             return;
         }
@@ -595,6 +643,7 @@ public class YtDlpService {
             job.setSpeedBps(p.speed);
         }
         job.setEta(p.eta);
+        updateTransferProgress(job, p);
 
         int emit;
         String phase;
@@ -672,6 +721,49 @@ public class YtDlpService {
         onUpdate.accept(job);
     }
 
+    /**
+     * Keep the two source transfers distinct. A finished yt-dlp progress record marks
+     * the end of one stream, so the next record belongs to the audio stream. This is
+     * also safe for a single-stream fallback: the processing line that follows fills
+     * in the remaining source step before the UI presents the final stage.
+     */
+    private void updateTransferProgress(Job job, Progress p) {
+        int pct = (int) Math.floor(p.percent);
+        if (job.getRequest().isAudio()) {
+            job.setPrimaryProgress(pct);
+            if (p.finished) {
+                job.setPrimaryProgress(100);
+                job.setCurrentStep("SECONDARY");
+            }
+            return;
+        }
+
+        if ("SECONDARY".equals(job.getCurrentStep())) {
+            job.setSecondaryProgress(pct);
+            if (p.finished) {
+                job.setSecondaryProgress(100);
+                job.setCurrentStep("FINALIZING");
+            }
+        } else {
+            job.setPrimaryProgress(pct);
+            if (p.finished) {
+                job.setPrimaryProgress(100);
+                job.setCurrentStep("SECONDARY");
+            }
+        }
+    }
+
+    private void completeSourceTransfers(Job job) {
+        job.setPrimaryProgress(100);
+        job.setSecondaryProgress(100);
+    }
+
+    /** Post-processors do not report byte progress, but each emitted phase is a real
+     *  completed milestone. The browser fills the short gaps between them smoothly. */
+    private void advanceFinalizing(Job job, int progress) {
+        job.setFinalizingProgress(Math.max(job.getFinalizingProgress(), progress));
+    }
+
     // ------------------------------------------------------------ COMPRESSION
 
     /**
@@ -706,6 +798,11 @@ public class YtDlpService {
             cmd.add("hvc1");
         }
         if ("mp4".equals(ext)) {
+            // Normally a no-op, because the download already chose an AAC stream. It only
+            // fires for a video YouTube has no AAC for, so those files still carry sound.
+            if (needsAac(probeCodec(src, "a:0"))) {
+                cmd.addAll(List.of("-c:a", "aac", "-b:a", "192k"));
+            }
             cmd.add("-movflags");
             cmd.add("+faststart");
         }
@@ -713,21 +810,49 @@ public class YtDlpService {
 
         String what = codecs.labelOf(codec);
         String prefix = total > 1 ? "Compressing " + idx + "/" + total + " to " + what : "Compressing to " + what;
+        boolean ok = runEncode(cmd, out, durationSec, prefix, job, onUpdate);
+        if (job.isCanceled()) {
+            return src;
+        }
+        if (!ok) {
+            throw new IOException("Compression to " + what + " failed (see server log)");
+        }
+
+        Files.move(out, src, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        long after = size(src);
+        log.info("Job {} compressed {} → {} ({} → {} bytes)", job.getId(), ext, codec, before, after);
+        return src;
+    }
+
+    /**
+     * Run one ffmpeg encode into {@code out}, reporting live progress on the job card.
+     * Returns true when it produced a usable file; on failure or cancel {@code out} is
+     * removed and false comes back, so the caller decides whether that is an error.
+     */
+    private boolean runEncode(List<String> cmd, Path out, double durationSec, String prefix,
+                              Job job, Consumer<Job> onUpdate) throws IOException, InterruptedException {
         job.setStatus(JobStatus.COMPRESSING);
         job.setPhase(prefix + "…");
         job.setSpeedBps(null);
         job.setEta(null);
         job.setDownloadedBytes(null);
         job.setTotalBytes(null);
+        completeSourceTransfers(job);
+        job.setCurrentStep("FINALIZING");
         onUpdate.accept(job);
-        log.info("Job {} compressing: {}", job.getId(), String.join(" ", cmd));
+        log.info("Job {} encoding: {}", job.getId(), String.join(" ", cmd));
 
         int[] last = {-1};
         int exit;
         try {
-            exit = Processes.stream(cmd, src.getParent(),
+            exit = Processes.stream(cmd, out.getParent(),
                     proc -> processes.put(job.getId(), proc),
                     line -> {
+                        // -progress output is all key=value; anything else is ffmpeg talking.
+                        // Without this a failed encode only ever said "exited 234".
+                        if (!line.matches("[a-z_0-9]+=.*")) {
+                            log.warn("Job {} ffmpeg: {}", job.getId(), line);
+                        }
                         if (job.isCanceled() || durationSec <= 0) {
                             return;
                         }
@@ -744,6 +869,7 @@ public class YtDlpService {
                             if (pct != last[0]) {
                                 last[0] = pct;
                                 job.setProgress(pct);
+                                job.setFinalizingProgress(pct);
                                 job.setPhase(prefix + "… " + pct + "%");
                                 onUpdate.accept(job);
                             }
@@ -753,18 +879,103 @@ public class YtDlpService {
             processes.remove(job.getId());
         }
 
-        if (job.isCanceled()) {
+        boolean ok = !job.isCanceled() && exit == 0 && Files.exists(out) && size(out) > 0;
+        if (!ok) {
+            Files.deleteIfExists(out);
+            if (!job.isCanceled()) {
+                log.warn("Job {} ffmpeg exited {}", job.getId(), exit);
+            }
+        }
+        return ok;
+    }
+
+    /**
+     * Audio that is present but is not AAC. AAC is the one audio codec every MP4 reader
+     * accepts; YouTube's default audio is Opus, which Premiere does not read from an MP4 —
+     * the usual reason such a file opens with the picture but no sound.
+     */
+    static boolean needsAac(String audio) {
+        return audio != null && !audio.isEmpty() && !"aac".equals(audio);
+    }
+
+    /** What the Auto tab promises: opens in QuickTime, Premiere, Final Cut, DaVinci. */
+    static boolean isUniversal(String video, String audio) {
+        return "h264".equals(video) && !needsAac(audio);
+    }
+
+    /**
+     * Make an Auto-mode MP4 playable everywhere, in place — and do nothing at all when it
+     * already is, which is every download up to 1080p.
+     *
+     * YouTube serves H.264 only up to 1080p; above that it is VP9 or AV1, which Premiere
+     * cannot decode and QuickTime will not play. Audio is already AAC (it is selected
+     * that way), but is converted too if a video ever arrives without it. Everything
+     * that is already fine is stream-copied, so the only cost is the video encode.
+     */
+    private Path makeUniversal(Path src, Job job, int idx, int total, Consumer<Job> onUpdate)
+            throws IOException, InterruptedException {
+        String video = probeCodec(src, "v:0");
+        String audio = probeCodec(src, "a:0");
+        if (isUniversal(video, audio)) {
             return src;
         }
-        if (exit != 0 || !Files.exists(out) || size(out) == 0) {
-            Files.deleteIfExists(out);
-            throw new IOException("Compression to " + what + " failed (ffmpeg exit " + exit + ")");
-        }
+        boolean needVideo = !"h264".equals(video);
+        boolean needAudio = needsAac(audio);
 
-        Files.move(out, src, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        long after = size(src);
-        log.info("Job {} compressed {} → {} ({} → {} bytes)", job.getId(), ext, codec, before, after);
-        return src;
+        Path out = src.resolveSibling(stripExt(src.getFileName().toString()) + ".enc.mp4");
+        double durationSec = probeDurationSeconds(src);
+        long srcKbps = videoBitrateKbps(src, durationSec, size(src));
+        String prefix = (total > 1 ? "Converting " + idx + "/" + total : "Converting")
+                + " to H.264 for Premiere & QuickTime";
+
+        // Hardware encoder first; if it refuses (very large frames, busy GPU) fall back to
+        // libx264 rather than failing a download that already finished.
+        List<List<String>> encoders = needVideo ? codecs.universalH264(srcKbps) : List.of(List.<String>of());
+        if (encoders.isEmpty()) {
+            throw new IOException("This server's ffmpeg has no H.264 encoder, so the video can't be"
+                    + " converted for editing software");
+        }
+        for (List<String> enc : encoders) {
+            List<String> cmd = new ArrayList<>(List.of(
+                    ffmpegBin, "-y", "-nostdin", "-loglevel", "error",
+                    "-progress", "pipe:1", "-nostats",
+                    "-i", src.toString(),
+                    "-map", "0", "-c", "copy"));
+            for (int i = 0; i < enc.size(); i++) {
+                cmd.add("-c:v".equals(enc.get(i)) ? "-c:v:0" : enc.get(i)); // main video only, not cover art
+            }
+            if (needVideo) {
+                cmd.addAll(List.of("-pix_fmt:v:0", "yuv420p")); // 10-bit AV1/VP9 → what H.264 hardware takes
+            }
+            if (needAudio) {
+                cmd.addAll(List.of("-c:a", "aac", "-b:a", "192k"));
+            }
+            cmd.addAll(List.of("-movflags", "+faststart", out.toString()));
+
+            if (runEncode(cmd, out, durationSec, prefix, job, onUpdate)) {
+                Files.move(out, src, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                log.info("Job {} made universal: {}/{} → h264/aac", job.getId(), video, audio);
+                return src;
+            }
+            if (job.isCanceled()) {
+                return src;
+            }
+        }
+        throw new IOException("Couldn't convert this video to H.264 for editing software (see server log)");
+    }
+
+    /** codec_name of one stream ("h264", "vp9", "av1", "aac", "opus"), or null when absent. */
+    private String probeCodec(Path file, String stream) {
+        try {
+            Processes.Result r = Processes.run(List.of(ffprobeBin(), "-v", "error",
+                    "-select_streams", stream, "-show_entries", "stream=codec_name",
+                    "-of", "csv=p=0", file.toString()), Duration.ofSeconds(20));
+            String s = r.stdout().trim();
+            int nl = s.indexOf('\n');
+            return s.isEmpty() ? null : (nl > 0 ? s.substring(0, nl) : s).trim();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**
