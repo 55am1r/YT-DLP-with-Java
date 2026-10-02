@@ -57,6 +57,31 @@ class ProgressParseTest {
         assertEquals("1:02:05", p.eta());
     }
 
+    /** The video stream names its codec; that is how Auto learns it will have to convert. */
+    @Test
+    void videoStreamNamesItsCodec() {
+        var p = YtDlpService.Progress.parse("[EZ]downloading|1024|57588768|  0.0%|NA|NA|vp09.00.51.08");
+        assertEquals("vp09.00.51.08", p.vcodec());
+    }
+
+    /** "none" is the audio stream, "NA" is unknown, and older lines have no field at all. */
+    @Test
+    void audioUnknownAndMissingCodecAreNull() {
+        assertNull(YtDlpService.Progress.parse("[EZ]downloading|1024|99|  0.0%|NA|NA|none").vcodec());
+        assertNull(YtDlpService.Progress.parse("[EZ]downloading|1024|99|  0.0%|NA|NA|NA").vcodec());
+        assertNull(YtDlpService.Progress.parse("[EZ]downloading|1024|99|  0.0%|NA|NA").vcodec());
+    }
+
+    /** Only a real non-H.264 video stream is a reason to convert — never audio or an unknown. */
+    @Test
+    void onlyNonH264VideoNeedsConverting() {
+        assertTrue(YtDlpService.needsH264Conversion("vp09.00.51.08"));
+        assertTrue(YtDlpService.needsH264Conversion("av01.0.13M.08"));
+        assertTrue(YtDlpService.needsH264Conversion("hev1.1.6.L120"));
+        assertFalse(YtDlpService.needsH264Conversion("avc1.640028"));
+        assertFalse(YtDlpService.needsH264Conversion(null));
+    }
+
     /** Must return null, never throw — a throw here kills the download's read loop. */
     @Test
     void malformedLinesAreIgnored() {

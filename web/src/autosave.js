@@ -1,8 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fileUrl } from './api'
 
 /** A finished file waits this long for the user to say where it goes, then saves itself. */
 export const GRACE_SECONDS = 30
+
+/**
+ * Folder saves that may run side by side. They are the user's own disk and bandwidth, so
+ * unlike the server's download queue there is no reason to go one at a time. The cap is
+ * only there because an HTTP/1.1 page gets 6 connections per host, and the progress
+ * polling needs a couple of them: with six big saves open the cards would stop updating.
+ */
+const MAX_PARALLEL_SAVES = 4
 
 /**
  * Choosing a folder needs the File System Access API: Chrome or Edge, on https or
@@ -10,8 +18,9 @@ export const GRACE_SECONDS = 30
  */
 export const canPickFolder = typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function'
 
-// ---- remembering the folder ---------------------------------------------------------
+// ---- remembering each tab's folder ---------------------------------------------------
 // A directory handle can't go in localStorage; IndexedDB is the one place it survives.
+// One entry per tab, keyed by the tab's id (which the app keeps stable across reloads).
 
 function idb(mode, run) {
   return new Promise((resolve, reject) => {
@@ -27,8 +36,8 @@ function idb(mode, run) {
     }
   })
 }
-const loadFolder = () => idb('readonly', (s) => s.get('folder')).catch(() => null)
-const storeFolder = (h) => idb('readwrite', (s) => (h ? s.put(h, 'folder') : s.delete('folder'))).catch(() => {})
+const loadFolder = (tab) => idb('readonly', (s) => s.get('folder:' + tab)).catch(() => null)
+const storeFolder = (tab, h) => idb('readwrite', (s) => (h ? s.put(h, 'folder:' + tab) : s.delete('folder:' + tab))).catch(() => {})
 
 const granted = async (h) => (await h.queryPermission({ mode: 'readwrite' })) === 'granted'
 // Re-asking needs a click (user activation), so only ever call this from a click handler.
@@ -103,7 +112,9 @@ function downloadToBrowser(job) {
 /**
  * Saves finished downloads without being asked.
  *
- *  - A folder is chosen -> the file goes there the moment it is ready, no countdown.
+ * Every tab (one per analysed link) has its own folder setting:
+ *  - A folder is chosen -> that tab's files go there the moment they are ready, no
+ *                          countdown. The Save file button is off: there is nothing to do.
  *  - No folder          -> a GRACE_SECONDS countdown. Pressing Save file, or choosing a
  *                          folder, ends it early; otherwise the file lands in the
  *                          browser's Downloads folder when it runs out.
@@ -111,31 +122,55 @@ function downloadToBrowser(job) {
  * Lives once, in App: the Downloads panel is mounted twice (desktop column and mobile
  * sheet), so doing this inside a card would save every file twice.
  */
-export function useAutoSave({ jobs, enabled, markSaved }) {
-  const [folder, setFolder] = useState(null) // { handle, name, granted }
-  const [ready, setReady] = useState(false) // the remembered folder has been looked up
+export function useAutoSave({ pages, enabled, markSaved }) {
+  const jobs = useMemo(() => pages.flatMap((p) => p.jobs), [pages])
+  const [folders, setFolders] = useState({}) // tab id -> { pageId, handle, name, granted }
+  const [ready, setReady] = useState(false) // the remembered folders have been looked up
   const [state, setState] = useState({}) // job id -> { phase: wait|saving|saved|failed, ... }
   const timers = useRef(new Map()) // job id -> countdown timeout (exactly the jobs in 'wait')
   const seen = useRef(new Set()) // finished jobs already handed to begin()
+  const knownTabs = useRef(new Set())
+  const slots = useRef({ busy: 0, waiting: [] })
   const jobsRef = useRef(jobs)
-  const folderRef = useRef(null)
-  const queue = useRef(Promise.resolve())
+  const pagesRef = useRef(pages)
+  const foldersRef = useRef({})
+  const pageOf = useRef(new Map()) // job id -> the tab it belongs to
   jobsRef.current = jobs
+  pagesRef.current = pages
+  pageOf.current = new Map(pages.flatMap((p) => p.jobs.map((j) => [j.id, p.id])))
 
   const put = useCallback((id, s) => setState((m) => ({ ...m, [id]: s })), [])
   const stop = useCallback((id) => {
     clearTimeout(timers.current.get(id))
     timers.current.delete(id)
   }, [])
-  const applyFolder = useCallback((f) => { folderRef.current = f; setFolder(f) }, [])
+  const applyFolder = useCallback((tab, f) => {
+    const next = { ...foldersRef.current }
+    if (f) next[tab] = { ...f, pageId: tab }
+    else delete next[tab]
+    foldersRef.current = next
+    setFolders(next)
+  }, [])
 
-  // One save at a time: two multi-GB writes in parallel only fight each other for the disk.
+  // Folder saves run side by side, up to the cap; any beyond it wait their turn.
+  const withSlot = useCallback((task) => {
+    const s = slots.current
+    const go = async () => {
+      s.busy++
+      try { await task() } finally {
+        s.busy--
+        s.waiting.shift()?.()
+      }
+    }
+    if (s.busy < MAX_PARALLEL_SAVES) go()
+    else s.waiting.push(go)
+  }, [])
+
   const run = useCallback((job, dir) => {
     stop(job.id)
     noteSaved(job.id)
     const where = dir ? dir.name : null
-    put(job.id, { phase: 'saving', where, pct: 0 })
-    queue.current = queue.current.then(async () => {
+    const task = async () => {
       let last = 0
       const progress = (pct) => {
         if (Date.now() - last > 250) { // ~4 repaints a second, not one per 64 KB chunk
@@ -143,6 +178,7 @@ export function useAutoSave({ jobs, enabled, markSaved }) {
           put(job.id, { phase: 'saving', where, pct })
         }
       }
+      put(job.id, { phase: 'saving', where, pct: 0 })
       try {
         if (dir) await writeToFolder(dir.handle, job, progress)
         else downloadToBrowser(job)
@@ -157,13 +193,20 @@ export function useAutoSave({ jobs, enabled, markSaved }) {
         // The finished file must not be lost, so the browser gets it instead.
         downloadToBrowser(job)
         put(job.id, { phase: 'saved', where: null, fallbackFrom: dir.name })
-        if (folderRef.current && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) {
-          applyFolder({ ...folderRef.current, granted: false }) // the chip should say "needs access"
+        const f = foldersRef.current[dir.pageId]
+        if (f && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) {
+          applyFolder(dir.pageId, { ...f, granted: false }) // the chip should say "needs access"
         }
       }
       markSaved(job.id)
-    })
-  }, [applyFolder, markSaved, put, stop])
+    }
+    if (dir) {
+      put(job.id, { phase: 'saving', where, pct: 0, queued: slots.current.busy >= MAX_PARALLEL_SAVES })
+      withSlot(task)
+    } else {
+      task() // the browser's own download is instant and keeps its own queue
+    }
+  }, [applyFolder, markSaved, put, stop, withSlot])
 
   // Every automatic save goes through here, so another tab that got there first wins.
   // (Pressing Save file is a decision, not an automation: it always goes ahead.)
@@ -174,39 +217,57 @@ export function useAutoSave({ jobs, enabled, markSaved }) {
     markSaved(job.id)
   }, [markSaved, put, run, stop])
 
-  // Everything still counting down goes to `dir` now: choosing a folder is the answer
-  // those files were waiting for.
-  const flush = useCallback((dir) => {
+  // Everything in this tab still counting down goes to `dir` now: choosing a folder is
+  // the answer those files were waiting for.
+  const flush = useCallback((tab, dir) => {
     for (const id of [...timers.current.keys()]) {
+      if (pageOf.current.get(id) !== tab) continue
       const job = jobsRef.current.find((j) => j.id === id)
       if (job) auto(job, dir)
     }
   }, [auto])
 
   const begin = useCallback(async (job) => {
-    const f = folderRef.current
+    const tab = pageOf.current.get(job.id)
+    const f = foldersRef.current[tab]
     if (f) {
       if (await granted(f.handle).catch(() => false)) return auto(job, f)
       // The browser has taken the permission back (it does that between visits).
       // Say so, rather than showing a folder as ready when it isn't.
-      if (f.granted) applyFolder({ ...f, granted: false })
+      if (f.granted) applyFolder(tab, { ...f, granted: false })
     }
     put(job.id, { phase: 'wait', deadline: Date.now() + GRACE_SECONDS * 1000 })
     timers.current.set(job.id, setTimeout(() => auto(job, null), GRACE_SECONDS * 1000))
   }, [applyFolder, auto, put])
 
-  // Look up the folder remembered from last time.
+  // Look up the folders remembered from last time, one per restored tab.
   useEffect(() => {
     let live = true
     ;(async () => {
-      const handle = canPickFolder ? await loadFolder() : null
-      if (handle && live) {
-        applyFolder({ handle, name: handle.name, granted: await granted(handle).catch(() => false) })
+      if (canPickFolder) {
+        for (const page of pagesRef.current) {
+          const handle = await loadFolder(page.id)
+          if (handle && live) {
+            applyFolder(page.id, { handle, name: handle.name, granted: await granted(handle).catch(() => false) })
+          }
+        }
       }
       if (live) setReady(true)
     })()
     return () => { live = false }
   }, [applyFolder])
+
+  // A closed tab takes its folder setting with it.
+  useEffect(() => {
+    const ids = new Set(pages.map((p) => p.id))
+    for (const id of knownTabs.current) {
+      if (!ids.has(id)) {
+        storeFolder(id, null)
+        if (foldersRef.current[id]) applyFolder(id, null)
+      }
+    }
+    knownTabs.current = ids
+  }, [pages, applyFolder])
 
   useEffect(() => {
     // Drop countdowns for files that are gone: cleared, tab closed, retried, logged out.
@@ -226,28 +287,26 @@ export function useAutoSave({ jobs, enabled, markSaved }) {
     }
   }, [jobs, enabled, ready, begin, stop])
 
-  const pick = useCallback(async () => {
+  const pick = useCallback(async (tab) => {
     let handle
     try {
       handle = await window.showDirectoryPicker({ id: 'ez-save', mode: 'readwrite', startIn: 'downloads' })
     } catch {
       return // dialog dismissed
     }
-    storeFolder(handle)
-    const next = { handle, name: handle.name, granted: true } // choosing it is itself the grant
-    applyFolder(next)
-    flush(next)
+    storeFolder(tab, handle)
+    applyFolder(tab, { handle, name: handle.name, granted: true }) // choosing it is itself the grant
+    flush(tab, foldersRef.current[tab])
   }, [applyFolder, flush])
 
   /** Re-grant a remembered folder after the browser has forgotten the permission. */
-  const allow = useCallback(async () => {
-    const f = folderRef.current
+  const allow = useCallback(async (tab) => {
+    const f = foldersRef.current[tab]
     if (!f) return
     let ok = false
     try { ok = await ask(f.handle) } catch { /* refused */ }
-    const next = { ...f, granted: ok }
-    applyFolder(next)
-    if (ok) flush(next)
+    applyFolder(tab, { ...f, granted: ok })
+    if (ok) flush(tab, foldersRef.current[tab])
   }, [applyFolder, flush])
 
   /**
@@ -256,30 +315,17 @@ export function useAutoSave({ jobs, enabled, markSaved }) {
    * ask now, while there is one, instead of failing to at the end with nobody there.
    * Doesn't block the download: it carries on whatever the answer.
    */
-  const ensureAccess = useCallback(() => {
-    const f = folderRef.current
-    if (f && !f.granted) allow() // also sends anything already counting down to the folder
+  const ensureAccess = useCallback((tab) => {
+    const f = foldersRef.current[tab]
+    if (f && !f.granted) allow(tab) // also sends anything already counting down to the folder
   }, [allow])
 
-  const clear = useCallback(() => {
-    storeFolder(null)
-    applyFolder(null)
+  const clear = useCallback((tab) => {
+    storeFolder(tab, null)
+    applyFolder(tab, null)
   }, [applyFolder])
 
-  /** The Save file button, when a folder is set. */
-  const save = useCallback(async (job) => {
-    stop(job.id) // the countdown ends the moment the user acts, whatever happens next
-    const f = folderRef.current
-    let dir = null
-    if (f) {
-      try {
-        if ((await granted(f.handle)) || (await ask(f.handle))) dir = { ...f, granted: true }
-      } catch { /* fall through to the browser */ }
-    }
-    run(job, dir)
-  }, [run, stop])
-
-  /** The Save file button with no folder set: the browser's own download does the work. */
+  /** The Save file button — only offered with no folder set, so the browser's own download does the work. */
   const saved = useCallback((job) => {
     stop(job.id)
     noteSaved(job.id)
@@ -287,5 +333,5 @@ export function useAutoSave({ jobs, enabled, markSaved }) {
     markSaved(job.id)
   }, [markSaved, put, stop])
 
-  return { folder, canPick: canPickFolder, state, pick, allow, ensureAccess, clear, save, saved }
+  return { folders, canPick: canPickFolder, state, pick, allow, ensureAccess, clear, saved }
 }

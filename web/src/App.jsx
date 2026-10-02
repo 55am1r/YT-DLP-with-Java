@@ -236,7 +236,7 @@ export default function App() {
   }
 
   async function onStart(pageId, request, force = false) {
-    autosave.ensureAccess() // this click is the one chance to re-ask for a forgotten folder
+    autosave.ensureAccess(pageId) // this click is the one chance to re-ask for a forgotten folder
     setError(null)
     try {
       const res = await startJob(request, force)
@@ -255,7 +255,7 @@ export default function App() {
    * a fresh job with the exact settings the original used.
    */
   async function retry(pageId, job) {
-    autosave.ensureAccess()
+    autosave.ensureAccess(pageId)
     try {
       const resumed = await retryJob(job.id)
       if (resumed) {
@@ -286,7 +286,7 @@ export default function App() {
 
   // Finished files save themselves (see autosave.js). Takes every tab's jobs, not just the
   // visible one, so a download that finishes in a background tab is still saved.
-  const autosave = useAutoSave({ jobs: pages.flatMap((p) => p.jobs), enabled: !!authed, markSaved })
+  const autosave = useAutoSave({ pages, enabled: !!authed, markSaved })
 
   /** Do the actual server-side clear, without confirmation. */
   async function doClear(pageId) {
@@ -412,6 +412,7 @@ export default function App() {
                 onClear={onClear}
                 onExpired={onExpired}
                 onRetry={(job) => retry(active.id, job)}
+                pageId={active.id}
                 autosave={autosave}
                 clearing={clearing}
               />
@@ -454,6 +455,7 @@ export default function App() {
                 onClear={onClear}
                 onExpired={onExpired}
                 onRetry={(job) => retry(active.id, job)}
+                pageId={active.id}
                 autosave={autosave}
                 clearing={clearing}
               />

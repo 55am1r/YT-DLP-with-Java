@@ -37,6 +37,12 @@ public class Job {
     private volatile int secondaryProgress;
     private volatile int finalizingProgress;
     private volatile String currentStep = "PRIMARY";
+    // The re-encode that follows a download (Auto's H.264 conversion above 1080p, or any
+    // Advanced codec) is a stage of its own. It used to write into the finalizing counter,
+    // so its 0-100% overwrote the merge/metadata progress already shown there and the bar
+    // snapped backwards the moment the encode began.
+    private volatile boolean convert;
+    private volatile int convertProgress;
 
     // Set once the file is ready — what the UI shows on a finished card
     private volatile String container;          // actual extension, e.g. "mp4"
@@ -82,6 +88,8 @@ public class Job {
     public int getSecondaryProgress() { return secondaryProgress; }
     public int getFinalizingProgress() { return finalizingProgress; }
     public String getCurrentStep() { return currentStep; }
+    public boolean isConvert() { return convert; }
+    public int getConvertProgress() { return convertProgress; }
     public String getContainer() { return container; }
     public Integer getHeight() { return height; }
     public String getQualityLabel() { return qualityLabel; }
@@ -111,6 +119,8 @@ public class Job {
     public void setSecondaryProgress(int secondaryProgress) { this.secondaryProgress = clampProgress(secondaryProgress); }
     public void setFinalizingProgress(int finalizingProgress) { this.finalizingProgress = clampProgress(finalizingProgress); }
     public void setCurrentStep(String currentStep) { this.currentStep = currentStep; }
+    public void setConvert(boolean convert) { this.convert = convert; }
+    public void setConvertProgress(int convertProgress) { this.convertProgress = clampProgress(convertProgress); }
     public void setContainer(String container) { this.container = container; }
     public void setHeight(Integer height) { this.height = height; }
     public void setQualityLabel(String qualityLabel) { this.qualityLabel = qualityLabel; }

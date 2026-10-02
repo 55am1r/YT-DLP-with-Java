@@ -113,6 +113,9 @@ finishes in minutes rather than hours and the CPU stays free for other jobs.
 ### Downloads and job control
 
 - **Live progress** with transfer speed, ETA, elapsed time and final file size.
+  The card breaks a job into stages — video, audio, finalizing, and (when a re-encode
+  follows) converting or compressing — each with its own bar, so a measured encode
+  percentage never overwrites the estimated merge/thumbnail progress before it.
 - **Pause, resume and cancel** on any running job.
 - **Trimming** via a YouTube-style range slider, cut at keyframes. If the pasted link
   carries a timestamp (`?t=90`), the slider opens pre-set to it; trimming is opt-in
@@ -126,13 +129,16 @@ finishes in minutes rather than hours and the CPU stays free for other jobs.
 - **Always-visible section.** The Downloads area and its Clear button are shown at all
   times, with a "no downloads yet" placeholder when empty.
 - **Auto-save.** A finished file saves itself, so nobody has to come back and press *Save
-  file*. Choose a folder in the Downloads panel (Chrome or Edge, https or localhost only) and
-  files are written there the moment they're ready, with no countdown. With no folder chosen
-  a file lands in the browser's Downloads folder 30 seconds after it finishes; pressing
-  *Save file* or choosing a folder inside that window acts immediately. It runs in the
-  browser, so the tab must be open — a file nobody saved stays on the server for its normal
-  two hours. Chrome withdraws a chosen folder's permission between visits, so the app re-asks
-  on the next *Download* click; Chrome may also ask once to allow multiple automatic
+  file*. Every tab (one per link) has its own folder setting in its Downloads panel — Chrome
+  or Edge, https or localhost only. With a folder chosen, that tab's files are written there
+  the moment they're ready, with no countdown, and the *Save file* button is greyed out
+  because there is nothing left to do. With no folder a file lands in the browser's Downloads
+  folder 30 seconds after it finishes; pressing *Save file* or choosing a folder inside that
+  window acts immediately. Saves run side by side (up to four at once — it's the user's own
+  disk, unlike the server's download queue), and any beyond that wait their turn. It runs in
+  the browser, so the tab must be open — a file nobody saved stays on the server for its
+  normal two hours. Chrome withdraws a chosen folder's permission between visits, so the app
+  re-asks on the next *Download* click; Chrome may also ask once to allow multiple automatic
   downloads. Safari and Firefox always use their own Downloads folder.
 - **Automatic cleanup.** Finished files carry a visible countdown and are deleted on
   a TTL, so the disk doesn't silently fill.

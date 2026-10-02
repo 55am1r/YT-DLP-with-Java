@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fileUrl, pauseJob, resumeJob, cancelJob } from '../api'
 import { fmtSize, fmtSpeed, fmtElapsed, fmtCountdown, fmtKind } from '../utils'
 
@@ -24,24 +24,27 @@ function clamp(value) {
   return Math.max(0, Math.min(100, Number(value) || 0))
 }
 
+// What an encode is called on the card. Auto's conversion is always H.264.
+const TARGET = { hevc: 'H.265', h264: 'H.264', av1: 'AV1', vp9: 'VP9' }
+
 function stagesFor(job, finalizingProgress) {
-  const isAudio = job.request?.kind?.toLowerCase() === 'audio'
-  return isAudio
-    ? [
-        { key: 'PRIMARY', progress: clamp(job.primaryProgress) },
-        { key: 'SECONDARY', progress: clamp(job.secondaryProgress) },
-        { key: 'FINALIZING', progress: finalizingProgress },
-      ]
-    : [
-        { key: 'PRIMARY', progress: clamp(job.primaryProgress) },
-        { key: 'SECONDARY', progress: clamp(job.secondaryProgress) },
-        { key: 'FINALIZING', progress: finalizingProgress },
-      ]
+  const steps = [
+    { key: 'PRIMARY', progress: clamp(job.primaryProgress) },
+    { key: 'SECONDARY', progress: clamp(job.secondaryProgress) },
+    { key: 'FINALIZING', progress: finalizingProgress },
+  ]
+  // The re-encode after the download has its own measured progress. It used to share the
+  // "Finalizing media" bar, which was estimating the merge and thumbnail steps — so when
+  // the encode began and reported 3%, that bar snapped back from ~95% to 3%.
+  if (job.convert) steps.push({ key: 'CONVERTING', progress: clamp(job.convertProgress) })
+  return steps
 }
 
 function stageLabel(job, key, state) {
   const isAudio = job.request?.kind?.toLowerCase() === 'audio'
-  const compressing = !isAudio && job.request?.codec && job.request.codec !== 'none'
+  const codec = job.request?.codec
+  const advanced = !isAudio && codec && codec !== 'none'
+  const target = TARGET[advanced ? codec : 'h264'] || 'H.264'
   const labels = isAudio
     ? {
         PRIMARY: ['Audio queued', 'Downloading audio', 'Audio downloaded'],
@@ -51,7 +54,10 @@ function stageLabel(job, key, state) {
     : {
         PRIMARY: ['Video queued', 'Downloading video', 'Video downloaded'],
         SECONDARY: ['Audio queued', 'Downloading audio', 'Audio downloaded'],
-        FINALIZING: [compressing ? 'Compression queued' : 'Finalization queued', compressing ? 'Compressing video' : 'Finalizing media', compressing ? 'Video compressed' : 'Media finalized'],
+        FINALIZING: ['Finalization queued', 'Finalizing media', 'Media finalized'],
+        CONVERTING: advanced
+          ? ['Compression queued', `Compressing to ${target}`, `Compressed to ${target}`]
+          : ['Conversion queued', `Converting to ${target}`, `Converted to ${target}`],
       }
   return labels[key][state === 'done' ? 2 : state === 'active' ? 1 : 0]
 }
@@ -79,14 +85,14 @@ function SaveNote({ s, folder }) {
     return (
       <div className="job-note autosave-note">
         <i className="fa-regular fa-clock" /> Saving to your Downloads folder in <Secs to={s.deadline} />
-        {folder && !folder.granted && <> — press <b>Save file</b> to use <b>{folder.name}</b></>}
+        {folder && !folder.granted && <> — or press <b>Allow</b> above to use <b>{folder.name}</b></>}
       </div>
     )
   }
   if (s.phase === 'saving') {
     return (
       <div className="job-note autosave-note">
-        <i className="fa-solid fa-circle-notch fa-spin" /> Saving to <b>{s.where || 'your Downloads folder'}</b>
+        <i className="fa-solid fa-circle-notch fa-spin" /> {s.queued ? 'Waiting to save to' : 'Saving to'} <b>{s.where || 'your Downloads folder'}</b>
         {s.pct > 0 && <> · {Math.round(s.pct * 100)}%</>}
       </div>
     )
@@ -103,20 +109,23 @@ function SaveNote({ s, folder }) {
   }
   return (
     <div className="job-note job-error-note">
-      <i className="fa-solid fa-triangle-exclamation" /> Couldn’t save automatically — press Save file ({s.error})
+      <i className="fa-solid fa-triangle-exclamation" /> Couldn’t save automatically ({s.error})
     </div>
   )
 }
 
-export default function JobCard({ job, onExpired, onRetry, autosave }) {
+export default function JobCard({ job, onExpired, onRetry, autosave, folder }) {
   const [blobUrl, setBlobUrl] = useState(null)
   const [left, setLeft] = useState(null)
   const [expanded, setExpanded] = useState(false)
+  const peak = useRef(0) // highest overall % shown for this run
 
   const done = job.status === 'COMPLETED'
   const paused = job.status === 'PAUSED'
   const failed = job.status === 'FAILED'
   const bad = failed || job.status === 'CANCELED'
+  const advanced = !!job.request?.codec && job.request.codec !== 'none'
+  const statusLabel = job.status === 'COMPRESSING' && !advanced ? 'Converting' : LABELS[job.status] || job.status
   const currentStep = job.currentStep || (['PROCESSING', 'COMPRESSING', 'PACKAGING'].includes(job.status) ? 'FINALIZING' : 'PRIMARY')
   const serverFinalizingProgress = clamp(job.finalizingProgress)
   const shouldEstimateFinalizing = !done && !bad && currentStep === 'FINALIZING' && ['PROCESSING', 'PACKAGING'].includes(job.status)
@@ -146,7 +155,13 @@ export default function JobCard({ job, onExpired, onRetry, autosave }) {
     : serverFinalizingProgress
   const steps = stagesFor(job, finalizingProgress)
   const stageOverall = Math.round(steps.reduce((sum, step) => sum + step.progress, 0) / steps.length)
-  const overall = done ? 100 : job.playlistCount > 1 ? clamp(job.progress) : stageOverall
+  const computed = done ? 100 : job.playlistCount > 1 ? clamp(job.progress) : stageOverall
+  // A live job's ring only ever climbs: a stage joining part-way changes the average, and
+  // that must not read as the job going backwards. A restart begins again from nothing;
+  // a dead job shows what is actually true.
+  if (['QUEUED', 'CHECKING_UPDATES', 'ANALYZING'].includes(job.status)) peak.current = 0
+  const overall = bad ? computed : Math.max(peak.current, computed)
+  if (!bad) peak.current = overall
   const isWorkingWithoutMeasure = !bad && !done && currentStep === 'FINALIZING' && finalizingProgress < 100
 
   const dl = job.downloadedBytes
@@ -157,8 +172,12 @@ export default function JobCard({ job, onExpired, onRetry, autosave }) {
         : <><b>{fmtSize(dl)}</b> downloaded</>)
     : null
 
+  const hasFolder = !!folder
+
+  // Pre-fetched only so the Save file button is instant. With a folder set that button is
+  // off and the saver fetches the file itself, so doing it here too would pull it twice.
   useEffect(() => {
-    if (!done || !job.fileSize || job.fileSize > PREFETCH_LIMIT) return
+    if (!done || !job.fileSize || job.fileSize > PREFETCH_LIMIT || hasFolder) return
     let dead = false
     let url = null
     fetch(fileUrl(job.id))
@@ -174,7 +193,7 @@ export default function JobCard({ job, onExpired, onRetry, autosave }) {
       dead = true
       if (url) URL.revokeObjectURL(url)
     }
-  }, [done, job.id, job.fileSize])
+  }, [done, job.id, job.fileSize, hasFolder])
 
   useEffect(() => {
     if (!job.expiresAt) return
@@ -202,7 +221,7 @@ export default function JobCard({ job, onExpired, onRetry, autosave }) {
         <div className="job-summary-main">
           <div className="job-head">
             <div className="job-title" title={job.title || ''}>{job.title || 'Preparing download'}</div>
-            <div className={`status ${done ? 'ok' : bad ? 'bad' : ''}`}>{LABELS[job.status] || job.status}</div>
+            <div className={`status ${done ? 'ok' : bad ? 'bad' : ''}`}>{statusLabel}</div>
           </div>
 
           <div className="job-metrics">
@@ -256,24 +275,21 @@ export default function JobCard({ job, onExpired, onRetry, autosave }) {
                 <i className="fa-solid fa-rotate-right" /> Retry
               </button>
             )}
-            {done && (
+            {done && (hasFolder ? (
+              // The folder saves it by itself; a second manual copy would only confuse.
+              <button className="btn btn-primary btn-sm" type="button" disabled title={`Saves automatically to ${folder.name}`}>
+                <i className="fa-solid fa-download" /> Save file
+              </button>
+            ) : (
               <a
                 className="btn btn-primary btn-sm"
                 href={blobUrl || fileUrl(job.id)}
                 download={job.fileName || true}
-                title={autosave.folder ? `Save to ${autosave.folder.name}` : undefined}
-                onClick={(e) => {
-                  if (autosave.folder) { // the browser's own download can't target a chosen folder
-                    e.preventDefault()
-                    autosave.save(job)
-                  } else {
-                    autosave.saved(job) // native download carries on; just record it
-                  }
-                }}
+                onClick={() => autosave.saved(job)} // the native download carries on; just record it
               >
                 <i className="fa-solid fa-download" /> Save file{blobUrl ? ' (ready)' : ''}
               </a>
-            )}
+            ))}
           </div>
         </div>
       </div>
