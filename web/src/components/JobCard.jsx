@@ -85,7 +85,7 @@ function SaveNote({ s, folder }) {
     return (
       <div className="job-note autosave-note">
         <i className="fa-regular fa-clock" /> Saving to your Downloads folder in <Secs to={s.deadline} />
-        {folder && !folder.granted && <> — or press <b>Allow</b> above to use <b>{folder.name}</b></>}
+        {folder && !folder.granted && <> — or press <b>Allow</b> to use <b>{folder.name}</b></>}
       </div>
     )
   }
@@ -114,7 +114,7 @@ function SaveNote({ s, folder }) {
   )
 }
 
-export default function JobCard({ job, onExpired, onRetry, autosave, folder }) {
+export default function JobCard({ job, onExpired, onRetry, autosave }) {
   const [blobUrl, setBlobUrl] = useState(null)
   const [left, setLeft] = useState(null)
   const [expanded, setExpanded] = useState(false)
@@ -172,7 +172,16 @@ export default function JobCard({ job, onExpired, onRetry, autosave, folder }) {
         : <><b>{fmtSize(dl)}</b> downloaded</>)
     : null
 
+  // This download's own folder. Only meaningful while Auto-save is on; off, the card is a
+  // plain Save file card again.
+  const autoOn = autosave.on
+  const folder = autoOn ? autosave.folders[job.id] : undefined
   const hasFolder = !!folder
+  const saveState = autosave.state[job.id]
+  // The choice only matters until the file starts to save, so it shows while the download
+  // runs and during the countdown — and not once there is nothing left to decide.
+  const wantsFolder = autoOn && autosave.canPick && !bad
+    && (ACTIVE.has(job.status) || (done && !job.saved && (!saveState || saveState.phase === 'wait')))
 
   // Pre-fetched only so the Save file button is instant. With a folder set that button is
   // off and the saver fetches the file itself, so doing it here too would pull it twice.
@@ -236,11 +245,43 @@ export default function JobCard({ job, onExpired, onRetry, autosave, folder }) {
           </div>
 
           {failed && <div className="job-note job-error-note">{job.error || 'Something went wrong'}</div>}
-          {done && <SaveNote s={autosave.state[job.id]} folder={autosave.folder} />}
-          {done && !['saving', 'saved'].includes(autosave.state[job.id]?.phase) && left != null && left > 0 && (
+          {done && autoOn && <SaveNote s={saveState} folder={folder} />}
+          {done && !(autoOn && ['saving', 'saved'].includes(saveState?.phase)) && left != null && left > 0 && (
             <div className="job-note expiry">Download in <b>{fmtCountdown(left)}</b>, then the file is removed</div>
           )}
         </div>
+
+        {wantsFolder && (
+          <div className="job-folder">
+            <div className="job-folder-text">
+              <i className="fa-regular fa-folder-open" />
+              <span>
+                {folder
+                  ? <>Saves to <b>{folder.name}</b>{!folder.granted && <span className="folder-warn"> · needs access</span>}</>
+                  : <>Saves to your <b>Downloads</b> folder</>}
+              </span>
+            </div>
+            <div className="job-folder-actions">
+              {folder && !folder.granted && (
+                <button className="btn btn-sm btn-primary" type="button" onClick={() => autosave.allow(job.id)}>Allow</button>
+              )}
+              <button className="btn btn-sm" type="button" onClick={() => autosave.pick(job.id)}>
+                {folder ? 'Change' : 'Choose folder'}
+              </button>
+              {folder && (
+                <button
+                  className="btn btn-sm btn-ghost"
+                  type="button"
+                  onClick={() => autosave.clear(job.id)}
+                  aria-label="Use the Downloads folder instead"
+                  title="Use the Downloads folder instead"
+                >
+                  <i className="fa-solid fa-xmark" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="job-toolbar">
           {/* Every state gets the toggle. It used to be hidden once a job failed or was
