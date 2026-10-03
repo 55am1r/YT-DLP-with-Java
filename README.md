@@ -167,6 +167,19 @@ finishes in minutes rather than hours and the CPU stays free for other jobs.
   its work folder, so `restart.sh` (or a crash, or a second copy of the app pointed at the
   same folder) destroys any download still running — the files cannot be recovered. Restart
   only when the Downloads list is empty.
+- **Stays reachable by itself.** A watchdog (the `com.predatorfx.ytdlp-redirect` agent)
+  checks every 20s that the app answers locally, that the tunnel answers from the public
+  side, and that the redirect page points at the live tunnel URL. cloudflared retries a
+  dropped connection on its own, backing off up to about a minute; when it instead sits
+  there holding a dead tunnel, launchd's `KeepAlive` never fires because the process has
+  not exited, so the watchdog restarts it after ~3 minutes unreachable — but only while
+  the internet is actually up, since during a real outage there is nothing to fix. The app
+  itself is only restarted after ~5 minutes silent, because a restart discards every
+  download in progress. Publishing the URL retries until it genuinely lands: the previous
+  version rewrote and committed the page *before* pushing and then compared against that
+  same file, so a push that failed during the outage was never retried and the team's link
+  stayed pointed at a dead tunnel until the Mac was rebooted. Log: `/tmp/ytdlp-redirect.log`,
+  quiet unless something is wrong.
 - **Concurrency cap.** A bounded worker pool with a queue; the limit is configurable.
 - **Transfer retries.** Fragment and extractor retries, added after testing showed
   YouTube intermittently dropping fragments under parallel load — failures that

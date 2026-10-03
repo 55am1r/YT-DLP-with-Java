@@ -12,11 +12,16 @@ function AutoSaveSwitch({ a }) {
       type="button"
       role="switch"
       aria-checked={a.on}
+      // Locked while a file is being written: flipping it mid-write would leave a
+      // half-saved file on disk with nothing watching it finish.
+      disabled={a.busy}
       className={`switch${a.on ? ' on' : ''}`}
       onClick={() => a.setOn(!a.on)}
-      title={a.on
-        ? `Auto-save is on. Each finished download is written straight into its folder.${a.fallback ? ' No folder is set, so files are handed to your browser instead.' : ''}`
-        : `Auto-save is off. Press Save file on each download. Turning it on asks once for a folder, so nothing prompts you later.`}
+      title={a.busy
+        ? 'Saving right now — you can change this once it finishes.'
+        : a.on
+          ? `Auto-save is on. Each finished download is written straight into its folder.${a.fallback ? ' No folder is set, so files are handed to your browser instead.' : ''}`
+          : `Auto-save is off. Press Save file on each download. Turning it on asks once for a folder, so nothing prompts you later.`}
     >
       <span className="switch-track"><span className="switch-knob" /></span>
       <span>Auto-save</span>

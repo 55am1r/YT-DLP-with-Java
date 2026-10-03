@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Auto-updates the public redirect page whenever the Cloudflare tunnel URL changes
-     (e.g. after a reboot), so the team's Netlify link needs no manual re-pointing.
+<!-- Keeps EZ-Tube reachable on its own: watches the app, the Cloudflare tunnel and the
+     public redirect page, and restarts or republishes whatever has stopped working, so a
+     network drop never needs someone to reboot the Mac.
      Install (the script must live on the LOCAL disk — macOS won't let launchd execute
      a script that sits on the /Volumes mount):
        mkdir -p ~/.ytdlp-web && cp auto-redirect.sh ~/.ytdlp-web/
        cp deploy/com.predatorfx.ytdlp-redirect.plist ~/Library/LaunchAgents/
        launchctl load -w ~/Library/LaunchAgents/com.predatorfx.ytdlp-redirect.plist
-     Log: /tmp/ytdlp-redirect.log -->
+     Log: /tmp/ytdlp-redirect.log (quiet unless something is wrong) -->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>

@@ -440,6 +440,8 @@ export function useAutoSave({ jobs, enabled, markSaved }) {
   return {
     on,
     setOn,
+    /** A save is mid-flight. Switching off now would orphan a half-written file. */
+    busy: Object.values(state).some((v) => v && v.phase === 'saving'),
     folders,
     folderFor,
     defaultFolder: folders[DEFAULT_KEY] || null,
