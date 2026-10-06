@@ -57,7 +57,9 @@ const ask = async (h) => (await h.requestPermission({ mode: 'readwrite' })) === 
 
 // ---- the Auto-save switch --------------------------------------------------------------
 const ON_KEY = 'ez-autosave'
-const readOn = () => { try { return localStorage.getItem(ON_KEY) !== 'off' } catch { return true } }
+// Off by default: turning it on prompts for a folder, which we don't want on every search.
+// Only an explicit 'on' (the user flipped the switch) counts.
+const readOn = () => { try { return localStorage.getItem(ON_KEY) === 'on' } catch { return false } }
 
 // ---- one save per file, even with two tabs open -----------------------------------
 // A second tab restores the same finished jobs and starts its own countdown, so without
