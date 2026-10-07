@@ -241,6 +241,7 @@ public class DownloadController {
         return refresh ? updates.ensureFresh(true) : updates.current();
     }
 
+    @PublicEndpoint(evenWhenBlocked = true)
     @GetMapping("/health")
     public Map<String, Object> health() {
         return Map.of("status", "ok");

@@ -30,7 +30,7 @@ export const getInsights = (days) => get(`/api/admin/insights?days=${days}`)
 export const getDevice = (id) => get(`/api/admin/devices/${encodeURIComponent(id)}`)
 export const getDownloads = (filters, offset = 0, limit = 50) =>
   get(`/api/admin/downloads?${query({ ...filters, offset, limit })}`)
-export const downloadsCsvUrl = (filters) => `/api/admin/downloads.csv?${query(filters)}`
+export const downloadsCsvUrl = (filters) => `/api/admin/downloads/export?${query(filters)}`
 
 export const updateDevice = (id, patch) => post(`/api/admin/devices/${encodeURIComponent(id)}`, patch)
 export const setIpBlocked = (ip, blocked) => post('/api/admin/ips/block', { ip, blocked })
