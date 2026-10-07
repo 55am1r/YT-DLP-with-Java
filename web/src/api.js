@@ -4,7 +4,7 @@
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 
-async function toError(res) {
+export async function toError(res) {
   let msg = `Request failed (${res.status})`
   try {
     const body = await res.json()
