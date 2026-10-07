@@ -231,6 +231,9 @@ public class ActivityService {
             }
         }
         store.appendEvent(e);
+        if (ActivityEvent.LOGIN_FAILED.equals(type)) {
+            geo.request(ip); // so the Security tab can say where wrong guesses come from
+        }
     }
 
     /** A job was just queued by this device. */

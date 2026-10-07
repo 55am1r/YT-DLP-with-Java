@@ -237,6 +237,78 @@ class AdminAccessTest {
     }
 
     @Test
+    void dashboardShowsTheAdminsOwnDevice() throws Exception {
+        MvcResult r = login("TestAdmin", "S3cret-pass!", "203.0.113.15");
+        String device = r.getResponse().getCookie(ActivityFilter.DEVICE_COOKIE).getValue();
+
+        mvc.perform(get("/api/admin/dashboard").with(from("203.0.113.15")).cookie(r.getResponse().getCookies()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.you").value(device))
+                .andExpect(jsonPath("$.devices[?(@.id == '" + device + "')].admin").value(true))
+                .andExpect(jsonPath("$.kpis.devicesTotal").isNumber())
+                .andExpect(jsonPath("$.system.retentionDays").value(365));
+        mvc.perform(get("/api/admin/insights?days=7").with(from("203.0.113.15")).cookie(r.getResponse().getCookies()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.perDay.length()").value(7));
+    }
+
+    @Test
+    void adminCannotBlockOwnDeviceOrIp() throws Exception {
+        MvcResult r = login("TestAdmin", "S3cret-pass!", "203.0.113.16");
+        Cookie[] c = r.getResponse().getCookies();
+        String device = r.getResponse().getCookie(ActivityFilter.DEVICE_COOKIE).getValue();
+
+        mvc.perform(post("/api/admin/devices/" + device).with(from("203.0.113.16")).cookie(c)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"blocked\":true}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/admin/ips/block").with(from("203.0.113.16")).cookie(c)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"ip\":\"203.0.113.16\",\"blocked\":true}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/admin/ips/block").with(from("203.0.113.16")).cookie(c)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"ip\":\"not-an-ip\",\"blocked\":true}"))
+                .andExpect(status().isBadRequest());
+        assertTrue(activity.blockedIps().isEmpty() || !activity.blockedIps().contains("203.0.113.16"));
+    }
+
+    @Test
+    void adminCanRenameAndBlockAnotherDevice() throws Exception {
+        MvcResult team = login("team", "team-pass", "203.0.113.17");
+        String teamDevice = team.getResponse().getCookie(ActivityFilter.DEVICE_COOKIE).getValue();
+        MvcResult admin = login("TestAdmin", "S3cret-pass!", "203.0.113.18");
+
+        mvc.perform(post("/api/admin/devices/" + teamDevice).with(from("203.0.113.18")).cookie(admin.getResponse().getCookies())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"nickname\":\"Ravi's iPhone\",\"blocked\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Ravi's iPhone"))
+                .andExpect(jsonPath("$.blocked").value(true));
+
+        mvc.perform(get("/api/me").with(from("203.0.113.17")).cookie(team.getResponse().getCookies()))
+                .andExpect(status().isForbidden());
+        assertTrue(activity.events().stream().anyMatch(e -> ActivityEvent.ADMIN_ACTION.equals(e.type())
+                && e.detail() != null && e.detail().startsWith("Blocked")));
+    }
+
+    @Test
+    void csvExportIsAnAttachment() throws Exception {
+        MvcResult admin = login("TestAdmin", "S3cret-pass!", "203.0.113.19");
+        MvcResult csv = mvc.perform(get("/api/admin/downloads.csv").with(from("203.0.113.19"))
+                .cookie(admin.getResponse().getCookies())).andReturn();
+
+        assertEquals(200, csv.getResponse().getStatus());
+        assertTrue(csv.getResponse().getContentType().startsWith("text/csv"));
+        assertTrue(csv.getResponse().getHeader("Content-Disposition").startsWith("attachment"));
+        assertTrue(csv.getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8).contains("Time,Device,"));
+    }
+
+    @Test
+    void unknownDeviceIsNotFound() throws Exception {
+        MvcResult admin = login("TestAdmin", "S3cret-pass!", "203.0.113.20");
+        mvc.perform(get("/api/admin/devices/no-such-device-000").with(from("203.0.113.20"))
+                        .cookie(admin.getResponse().getCookies()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void downloadLifecycleIsRecorded() {
         String id = "t-" + UUID.randomUUID().toString().substring(0, 8);
         DownloadRequest req = new DownloadRequest("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "audio", null, null,
