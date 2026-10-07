@@ -218,8 +218,12 @@ public class ActivityStore {
         return sb.toString();
     }
 
-    /** Owner-only: these files hold the team's IPs and locations. */
     private void ensureDir() throws IOException {
+        ensurePrivateDir(dir);
+    }
+
+    /** Owner-only: these files hold the team's IPs and locations. */
+    static void ensurePrivateDir(Path dir) throws IOException {
         if (Files.isDirectory(dir)) {
             return;
         }
