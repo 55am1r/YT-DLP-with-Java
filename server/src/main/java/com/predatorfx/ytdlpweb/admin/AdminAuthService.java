@@ -15,6 +15,8 @@ import java.time.Duration;
 import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Owner-only admin login on the same login screen as the team.
@@ -32,9 +34,17 @@ public class AdminAuthService {
     public static final String COOKIE = "ez_admin";
     static final Duration MAX_AGE = Duration.ofHours(12);
     static final Duration IDLE = Duration.ofHours(2);
+    /** Admin-password checks allowed at once — each burns ~0.1 s of CPU on purpose. */
+    static final int CHECK_SLOTS = 2;
+    /** How long a login waits for a free slot before being told the server is busy. */
+    static final Duration CHECK_WAIT = Duration.ofSeconds(3);
+
+    public enum Check { MATCH, MISMATCH, BUSY }
 
     private final AdminCredential credential; // null = admin login disabled
     private final Clock clock;
+    private final Semaphore slots;
+    private final Duration checkWait;
     private final SecureRandom random = new SecureRandom();
     private final Map<String, Session> sessions = new ConcurrentHashMap<>();
 
@@ -58,7 +68,13 @@ public class AdminAuthService {
     }
 
     AdminAuthService(String encoded, Clock clock) {
+        this(encoded, clock, CHECK_SLOTS, CHECK_WAIT);
+    }
+
+    AdminAuthService(String encoded, Clock clock, int checkSlots, Duration checkWait) {
         this.clock = clock;
+        this.slots = new Semaphore(checkSlots);
+        this.checkWait = checkWait;
         this.credential = AdminCredential.parse(encoded).orElse(null);
         if (credential == null && encoded != null && !encoded.isBlank()) {
             log.warn("app.admin.credential is not a valid pbkdf2-sha256 hash — the admin panel is disabled");
@@ -70,7 +86,31 @@ public class AdminAuthService {
     }
 
     public boolean checkCredentials(String username, String password) {
-        return credential != null && credential.matches(username, password);
+        return check(username, password) == Check.MATCH;
+    }
+
+    /**
+     * Compare against the admin credential. A flood of wrong guesses can't eat the Mac's CPU:
+     * only {@link #CHECK_SLOTS} checks run at once, and a login that can't get a slot within
+     * {@link #CHECK_WAIT} is answered BUSY instead.
+     */
+    public Check check(String username, String password) {
+        if (credential == null) {
+            return Check.MISMATCH;
+        }
+        try {
+            if (!slots.tryAcquire(checkWait.toMillis(), TimeUnit.MILLISECONDS)) {
+                return Check.BUSY;
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return Check.BUSY;
+        }
+        try {
+            return credential.matches(username, password) ? Check.MATCH : Check.MISMATCH;
+        } finally {
+            slots.release();
+        }
     }
 
     /** A new admin session; the caller hands the token to the browser in {@link #sessionCookie}. */

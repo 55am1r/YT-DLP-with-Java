@@ -21,7 +21,7 @@ class ClientInfoTest {
     void ipv6LoopbackAlsoTrusted() {
         assertEquals(new ClientInfo("49.37.10.20", "internet"),
                 ClientInfo.resolve("0:0:0:0:0:0:0:1", "49.37.10.20", null));
-        assertEquals("2401:4900:1c5a::1", ClientInfo.resolve("::1", "2401:4900:1c5a::1", null).ip());
+        assertEquals("2401:4900:1c5a:0:0:0:0:1", ClientInfo.resolve("::1", "2401:4900:1c5a::1", null).ip());
     }
 
     @Test
@@ -54,6 +54,16 @@ class ClientInfoTest {
     @Test
     void ipv4MappedAddressIsUnwrapped() {
         assertEquals(new ClientInfo("192.168.1.20", "lan"), ClientInfo.resolve("::ffff:192.168.1.20", null, null));
+    }
+
+    /** One address, one spelling — blocks and lockouts compare text. */
+    @Test
+    void ipv6IsCanonical() {
+        assertEquals("2001:db8:0:0:0:0:0:1", ClientInfo.resolve("::1", "2001:DB8::1", null).ip());
+        assertEquals("2001:db8:0:0:0:0:0:1", ClientInfo.resolve("2001:db8:0:0::1", null, null).ip());
+        assertEquals("2001:db8:0:0:0:0:0:1", ClientInfo.canonical("2001:db8::0001"));
+        assertEquals("49.37.10.20", ClientInfo.canonical("49.37.10.20"));
+        assertEquals("not-an-ip", ClientInfo.canonical("not-an-ip"));
     }
 
     @Test
