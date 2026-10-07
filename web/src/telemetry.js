@@ -7,6 +7,8 @@
 
 const CHOICE_KEY = 'ez-location-choice'
 const ASK_AGAIN_AFTER = 30 * 86_400_000
+/** Fired on window whenever the choice changes, so every part of the page can follow it. */
+export const CHOICE_EVENT = 'ez-location-choice'
 
 /** Sent once per app load. */
 export function helloInfo() {
@@ -49,6 +51,7 @@ export function rememberChoice(choice) {
   } catch {
     // private mode: they'll simply be asked again next time
   }
+  window.dispatchEvent(new Event(CHOICE_EVENT))
 }
 
 /** Show the card? Only when the browser would still ask, and "No thanks" wasn't said this month. */
@@ -58,8 +61,12 @@ export function shouldAsk(permission, stored, now = Date.now()) {
   return !(stored?.choice === 'declined' && now - stored.at < ASK_AGAIN_AFTER)
 }
 
-/** Already allowed: refresh the position without showing anything. */
+/**
+ * Already allowed: refresh the position without showing anything — unless they pressed
+ * "No thanks" or "Stop sharing" here, which outranks a permission the browser still holds.
+ */
 export function shouldRefreshQuietly(permission, stored) {
+  if (stored?.choice === 'declined' || stored?.choice === 'denied') return false
   return permission === 'granted' || (permission === 'unknown' && stored?.choice === 'granted')
 }
 
