@@ -46,7 +46,11 @@ public class ActivityService {
     /** A gap this long between requests counts as a new visit. */
     static final Duration NEW_VISIT_AFTER = Duration.ofMinutes(30);
     static final int MAX_IPS_PER_DEVICE = 20;
+    /** Events kept in memory for the panel (the file keeps everything within the retention period). */
     static final int MAX_EVENTS = 20_000;
+    /** Wrong logins written one by one per hour; past that they're counted and summarised. */
+    static final int FAILED_LOGINS_PER_HOUR = 300;
+    private static final long HOUR = Duration.ofHours(1).toMillis();
 
     /** What the browser reports about itself when the app opens. */
     public record Hello(String timezone, String language, String screen, Boolean touch, Boolean secure,
@@ -61,11 +65,19 @@ public class ActivityService {
     private final GeoIpService geo;
     private final int retentionDays;
     private final Clock clock;
+    private final int maxEvents;
+    private final int failedLoginsPerHour;
 
     private final Object lock = new Object();
     private final Map<String, DeviceRecord> devices = new HashMap<>();
     private final Map<String, DownloadRecord> downloads = new LinkedHashMap<>(); // by job id, oldest first
     private final Deque<ActivityEvent> events = new ArrayDeque<>();
+    // Wrong logins and lockouts come from anyone on the internet; kept apart so they can't
+    // crowd the admin's own trail (logins, actions) out of memory.
+    private final Deque<ActivityEvent> failedLogins = new ArrayDeque<>();
+    private long failedWindowStart;
+    private int failedInWindow;
+    private int failedSuppressed;
     private final Set<String> blockedIps = new LinkedHashSet<>();
     private Announcement announcement;
     private boolean devicesDirty;
@@ -78,14 +90,22 @@ public class ActivityService {
     }
 
     ActivityService(ActivityStore store, GeoIpService geo, int retentionDays, Clock clock) {
+        this(store, geo, retentionDays, clock, MAX_EVENTS, FAILED_LOGINS_PER_HOUR);
+    }
+
+    ActivityService(ActivityStore store, GeoIpService geo, int retentionDays, Clock clock, int maxEvents,
+                    int failedLoginsPerHour) {
         this.store = store;
         this.geo = geo;
         this.retentionDays = Math.max(1, retentionDays);
         this.clock = clock;
+        this.maxEvents = Math.max(1, maxEvents);
+        this.failedLoginsPerHour = Math.max(1, failedLoginsPerHour);
     }
 
     @PostConstruct
     void init() {
+        store.claim();
         ActivityStore.Loaded loaded = store.load();
         long now = clock.millis();
         synchronized (lock) {
@@ -100,7 +120,7 @@ public class ActivityService {
                 }
                 downloads.put(r.getJobId(), r);
             }
-            events.addAll(loaded.events());
+            loaded.events().forEach(e -> remember(e, isNoise(e.type())));
             loaded.settings().blockedIps().forEach(ip -> blockedIps.add(ClientInfo.canonical(ip)));
             announcement = loaded.settings().announcement();
         }
@@ -112,6 +132,7 @@ public class ActivityService {
     @PreDestroy
     void shutdown() {
         flush();
+        store.release();
     }
 
     // ------------------------------------------------------------------ recording
@@ -122,7 +143,6 @@ public class ActivityService {
             return;
         }
         long now = clock.millis();
-        boolean newIp;
         synchronized (lock) {
             DeviceRecord d = devices.get(deviceId);
             if (d == null) {
@@ -143,15 +163,14 @@ public class ActivityService {
                 d.setUserAgent(ua);
                 describe(d);
             }
-            newIp = !client.ip().equals(d.getLastIp());
             d.setLastIp(client.ip());
             d.setVia(client.via());
             trackIp(d, client.ip(), now);
             devicesDirty = true;
         }
-        if (newIp) {
-            geo.request(client.ip());
-        }
+        // Cheap when the answer is cached or a lookup just failed (it backs off for 30 min), and
+        // it means a lookup that failed — say right after a reboot — is retried on a later visit.
+        geo.request(client.ip());
     }
 
     public void hello(String deviceId, Hello hello) {
@@ -232,17 +251,50 @@ public class ActivityService {
     }
 
     public void recordEvent(String type, String deviceId, String ip, String detail, String url, String title) {
-        ActivityEvent e = new ActivityEvent(clock.millis(), type, deviceId, ip, clip(detail, 300), clip(url, 2000),
-                clip(title, 300));
+        long now = clock.millis();
+        boolean noise = isNoise(type);
+        List<ActivityEvent> toWrite = new ArrayList<>(2);
         synchronized (lock) {
-            events.addLast(e);
-            while (events.size() > MAX_EVENTS) {
-                events.removeFirst();
+            if (noise) {
+                // An hourly budget for wrong logins: a flood gets one summary line, not a full disk.
+                if (now - failedWindowStart >= HOUR) {
+                    if (failedSuppressed > 0) {
+                        ActivityEvent summary = new ActivityEvent(now, ActivityEvent.LOGIN_FAILED, null, null,
+                                failedSuppressed + " more wrong logins were not listed one by one (over "
+                                        + failedLoginsPerHour + " in an hour)", null, null);
+                        remember(summary, true);
+                        toWrite.add(summary);
+                    }
+                    failedWindowStart = now;
+                    failedInWindow = 0;
+                    failedSuppressed = 0;
+                }
+                if (failedInWindow >= failedLoginsPerHour) {
+                    failedSuppressed++;
+                    return;
+                }
+                failedInWindow++;
             }
+            ActivityEvent e = new ActivityEvent(now, type, deviceId, ip, clip(detail, 300), clip(url, 2000), clip(title, 300));
+            remember(e, noise);
+            toWrite.add(e);
         }
-        store.appendEvent(e);
+        toWrite.forEach(store::appendEvent);
         if (ActivityEvent.LOGIN_FAILED.equals(type)) {
             geo.request(ip); // so the Security tab can say where wrong guesses come from
+        }
+    }
+
+    private static boolean isNoise(String type) {
+        return ActivityEvent.LOGIN_FAILED.equals(type) || ActivityEvent.LOCKED_OUT.equals(type);
+    }
+
+    /** Keep an event in memory (caller holds the lock), each kind capped on its own. */
+    private void remember(ActivityEvent e, boolean noise) {
+        Deque<ActivityEvent> into = noise ? failedLogins : events;
+        into.addLast(e);
+        while (into.size() > maxEvents) {
+            into.removeFirst();
         }
     }
 
@@ -425,7 +477,11 @@ public class ActivityService {
     /** Oldest first. */
     public List<ActivityEvent> events() {
         synchronized (lock) {
-            return new ArrayList<>(events);
+            List<ActivityEvent> all = new ArrayList<>(events.size() + failedLogins.size());
+            all.addAll(events);
+            all.addAll(failedLogins);
+            all.sort(Comparator.comparingLong(ActivityEvent::at));
+            return all;
         }
     }
 
@@ -461,11 +517,13 @@ public class ActivityService {
         synchronized (lock) {
             downloads.values().removeIf(r -> r.getAt() < cutoff);
             events.removeIf(e -> e.at() < cutoff);
+            failedLogins.removeIf(e -> e.at() < cutoff);
             // Blocked devices are kept: forgetting one would quietly lift its block.
             if (devices.values().removeIf(d -> d.getLastSeen() < cutoff && !d.isBlocked())) {
                 devicesDirty = true;
             }
-            store.rewrite(new ArrayList<>(downloads.values()), new ArrayList<>(events));
+            store.rewriteDownloads(new ArrayList<>(downloads.values()));
+            store.pruneEvents(cutoff);
         }
         flush();
     }

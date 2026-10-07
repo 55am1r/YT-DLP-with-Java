@@ -52,8 +52,6 @@ public class AdminReports {
 
     /** Seen this recently = online now. The open app checks the yt-dlp badge every 10 s. */
     static final Duration ONLINE = Duration.ofMinutes(2);
-    /** A finished file younger than this may not have been saved by its owner yet. */
-    static final Duration RECENT_FILE = Duration.ofMinutes(10);
     private static final long DAY = Duration.ofDays(1).toMillis();
     private static final Pattern YOUTUBE_ID = Pattern.compile(
             "(?:youtube\\.com/(?:watch\\?(?:[^#]*&)?v=|shorts/|live/|embed/)|youtu\\.be/)([A-Za-z0-9_-]{11})");
@@ -93,7 +91,7 @@ public class AdminReports {
 
     public record SystemView(String ytdlpInstalled, String ytdlpLatest, boolean ytdlpUpToDate, Long diskFreeBytes,
                              Long diskTotalBytes, long uptimeMs, String publicUrl, String lanUrl, int runningJobs,
-                             int recentFiles, boolean safeToRestart, String restartNote, String dataDir,
+                             int unsavedFiles, boolean safeToRestart, String restartNote, String dataDir,
                              int retentionDays, long serverTime, String serverZone) {}
 
     public record Dashboard(Kpis kpis, List<DeviceView> devices, List<LiveJob> live, List<DownloadView> recent,
@@ -109,6 +107,9 @@ public class AdminReports {
                            Map<String, Integer> statuses, List<TopItem> topPlaces, List<TopItem> topDevices) {}
 
     public record Page<T>(int total, List<T> items) {}
+
+    /** What a restart would destroy right now: downloads in progress, and finished files nobody has saved. */
+    public record RestartCheck(int running, int unsaved, boolean safe, String note) {}
 
     public record DeviceDetail(DeviceView device, List<DownloadView> downloads, List<EventView> events) {}
 
@@ -200,7 +201,7 @@ public class AdminReports {
                 .stream().map(e -> view(e, byId)).toList();
 
         return new Dashboard(kpis(devices, downloads, events, all, geo::cached, now, zone), views, live, recent, feed,
-                security, guard.lockedIps(), activity.blockedIps().stream().sorted().toList(), system(all, now),
+                security, guard.lockedIps(), activity.blockedIps().stream().sorted().toList(), system(all, byJob, now),
                 activity.announcement(), you);
     }
 
@@ -585,7 +586,7 @@ public class AdminReports {
 
     // ------------------------------------------------------------------ the Mac itself
 
-    private SystemView system(List<Job> all, long now) {
+    private SystemView system(List<Job> all, Map<String, DownloadRecord> byJob, long now) {
         YtDlpUpdateService.UpdateStatus u = updates.current();
         Long free = null;
         Long total = null;
@@ -596,18 +597,42 @@ public class AdminReports {
         } catch (IOException | RuntimeException ignored) {
             // the volume may be unmounted; the panel shows "unknown"
         }
-        int running = (int) all.stream().filter(j -> !isFinal(j.getStatus().name())).count();
-        int recent = (int) all.stream().filter(j -> j.getStatus() == JobStatus.COMPLETED && j.getFinishedAt() != null
-                && now - j.getFinishedAt() < RECENT_FILE.toMillis()).count();
-        String note = running > 0
-                ? running + (running == 1 ? " download is" : " downloads are") + " in progress — a restart would delete "
-                        + (running == 1 ? "it." : "them.")
-                : recent > 0
-                ? recent + (recent == 1 ? " file" : " files") + " finished in the last 10 minutes and may not be saved yet."
-                : "Safe to restart — nothing is downloading.";
+        RestartCheck restart = restartCheck(all, byJob);
         return new SystemView(u.installed(), u.latest(), u.upToDate(), free, total,
-                ManagementFactory.getRuntimeMXBean().getUptime(), publicUrl(), lanUrl(), running, recent,
-                running == 0 && recent == 0, note, dataDir, retentionDays, now, ZoneId.systemDefault().getId());
+                ManagementFactory.getRuntimeMXBean().getUptime(), publicUrl(), lanUrl(), restart.running(),
+                restart.unsaved(), restart.safe(), restart.note(), dataDir, retentionDays, now,
+                ZoneId.systemDefault().getId());
+    }
+
+    /**
+     * A restart wipes the work dir: every download in progress, and every finished file still on
+     * the server. Files someone has already saved are no loss; the rest are.
+     */
+    static RestartCheck restartCheck(List<Job> jobs, Map<String, DownloadRecord> byJob) {
+        int running = 0;
+        int unsaved = 0;
+        for (Job j : jobs) {
+            if (!isFinal(j.getStatus().name())) {
+                running++;
+            } else if (j.getStatus() == JobStatus.COMPLETED) {
+                DownloadRecord r = byJob.get(j.getId());
+                if (r == null || r.getSavedBy().isEmpty()) {
+                    unsaved++;
+                }
+            }
+        }
+        List<String> losses = new ArrayList<>();
+        if (running > 0) {
+            losses.add(running + (running == 1 ? " download is" : " downloads are") + " in progress");
+        }
+        if (unsaved > 0) {
+            losses.add(unsaved + (unsaved == 1 ? " finished file hasn't" : " finished files haven't")
+                    + " been saved by anyone yet");
+        }
+        String note = losses.isEmpty()
+                ? "Safe to restart — nothing is downloading and every finished file has been saved."
+                : String.join(" and ", losses) + " — a restart would delete " + (running + unsaved == 1 ? "it." : "them.");
+        return new RestartCheck(running, unsaved, losses.isEmpty(), note);
     }
 
     /** The current Cloudflare quick-tunnel address, read from the tunnel's log (as tunnel-url.sh does). */

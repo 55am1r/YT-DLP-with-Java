@@ -10,6 +10,9 @@ import tools.jackson.databind.json.JsonMapper;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -39,6 +42,10 @@ import java.util.Map;
  * by a crash is skipped on load and the file is given a fresh line ending, so the next record
  * can't fuse with it. Failures are logged and swallowed — record-keeping must never break a
  * download.
+ *
+ * One process writes a data dir at a time ({@link #claim()}): a second EZ-Tube pointed at the
+ * same folder — a test instance missing its own app.admin.data-dir — only reads, so it can't
+ * overwrite the live server's records.
  */
 public class ActivityStore {
 
@@ -65,9 +72,56 @@ public class ActivityStore {
     }
 
     private final Path dir;
+    private boolean writable = true;
+    private FileChannel lockChannel;
+    private FileLock lockHandle;
 
     public ActivityStore(Path dir) {
         this.dir = dir;
+    }
+
+    /** Take the data dir for this process; false (and read-only from now on) when another process has it. */
+    public synchronized boolean claim() {
+        try {
+            ensureDir();
+            lockChannel = FileChannel.open(dir.resolve(".lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+            lockHandle = lockChannel.tryLock();
+        } catch (OverlappingFileLockException e) {
+            lockHandle = null; // held by another store in this same JVM
+        } catch (IOException e) {
+            log.warn("Could not lock admin data dir {} ({}); continuing without the lock", dir, e.toString());
+            return writable = true;
+        }
+        writable = lockHandle != null;
+        if (!writable) {
+            closeQuietly();
+            log.error("Admin records in {} are in use by another EZ-Tube process — this one will only read them. "
+                    + "Give it its own app.admin.data-dir.", dir);
+        }
+        return writable;
+    }
+
+    public synchronized void release() {
+        try {
+            if (lockHandle != null && lockHandle.isValid()) {
+                lockHandle.release();
+            }
+        } catch (IOException ignored) {
+            // closing the channel releases it anyway
+        }
+        closeQuietly();
+    }
+
+    private void closeQuietly() {
+        try {
+            if (lockChannel != null) {
+                lockChannel.close();
+            }
+        } catch (IOException ignored) {
+            // nothing more to do
+        }
+        lockChannel = null;
+        lockHandle = null;
     }
 
     public Path dir() {
@@ -89,25 +143,48 @@ public class ActivityStore {
     }
 
     public synchronized void saveDevices(Collection<DeviceRecord> devices) {
+        if (!writable) {
+            return;
+        }
         writeAtomically(DEVICES, () -> JSON.writeValueAsString(List.copyOf(devices)));
     }
 
     public synchronized void saveSettings(Settings settings) {
+        if (!writable) {
+            return;
+        }
         writeAtomically(SETTINGS, () -> JSON.writeValueAsString(settings));
     }
 
     public synchronized void appendDownload(DownloadRecord record) {
-        appendLine(DOWNLOADS, record);
+        if (writable) {
+            appendLine(DOWNLOADS, record);
+        }
     }
 
     public synchronized void appendEvent(ActivityEvent event) {
-        appendLine(EVENTS, event);
+        if (writable) {
+            appendLine(EVENTS, event);
+        }
     }
 
-    /** Replace both logs with exactly these records (retention + de-duplication). */
-    public synchronized void rewrite(List<DownloadRecord> downloads, List<ActivityEvent> events) {
-        writeAtomically(DOWNLOADS, () -> lines(downloads));
-        writeAtomically(EVENTS, () -> lines(events));
+    /** Replace the downloads log with exactly these records (retention + one line per job). */
+    public synchronized void rewriteDownloads(List<DownloadRecord> downloads) {
+        if (writable) {
+            writeAtomically(DOWNLOADS, () -> lines(downloads));
+        }
+    }
+
+    /**
+     * Drop events older than {@code cutoff} from the log file itself. Works from the file, not
+     * from memory (which only keeps the newest few thousand), so nothing inside the retention
+     * period is lost however busy the log has been.
+     */
+    public synchronized void pruneEvents(long cutoff) {
+        if (writable) {
+            List<ActivityEvent> keep = readLines(EVENTS, ActivityEvent.class).stream().filter(e -> e.at() >= cutoff).toList();
+            writeAtomically(EVENTS, () -> lines(keep));
+        }
     }
 
     // ------------------------------------------------------------------ internals
