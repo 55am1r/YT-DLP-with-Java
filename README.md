@@ -223,8 +223,8 @@ finishes in minutes rather than hours and the CPU stays free for other jobs.
 
 Owner-only. The admin's own username and password, typed into the normal login screen,
 open an admin panel instead of the downloader (each has a button to switch to the other).
-The credentials are stored only as a salted PBKDF2 hash (`app.admin.credential`), and both
-parts are case-sensitive.
+The credentials are stored only as a salted PBKDF2 hash (`app.admin.credential`), both parts
+are case-sensitive, and they must differ from the team login (which is checked first).
 
 - **Where everyone is** — a dotted ASCII world map with a marker for every device: its
   precise location if the person chose to share it, otherwise the approximate city of its
@@ -236,15 +236,17 @@ parts are case-sensitive.
   period, with a CSV export.
 - **Insights** — downloads per day, busiest hours, most-downloaded videos, audio vs video,
   quality and format mix, top places, most active devices.
-- **Security** — wrong logins and where they came from. Ten wrong attempts from one IP in
-  15 minutes lock it out for 10 minutes. IPs and devices can be blocked and unblocked.
+- **Security** — wrong logins and where they came from. Ten wrong attempts from one IP (an
+  IPv6 /64) in 15 minutes lock it out for 10 minutes. IPs and devices can be blocked and
+  unblocked. Every admin action is logged.
 - **System** — whether a restart is safe right now, the current public and LAN links,
   yt-dlp version, free disk space, and an announcement banner for the whole team.
 
 **Location consent.** Teammates see an optional card — *Share your location with the
 EZ-Tube admin?* The browser's own prompt appears only after they press **Share location**;
-**No thanks** is respected for 30 days, and turning location off later deletes the stored
-position. Browsers allow location only over HTTPS, so it is offered on the public (tunnel)
+**No thanks** is respected for 30 days. While sharing, the position is refreshed each time
+the app opens and the footer offers **Stop sharing**, which deletes the stored position (so
+does turning location off in the browser). Browsers allow location only over HTTPS, so it is offered on the public (tunnel)
 link, not the plain-http LAN address. Approximate locations come from ipwho.is (falling
 back to ipinfo.io), cached for 14 days; `app.geo.enabled=false` stops all lookups.
 
@@ -390,7 +392,7 @@ cd web && npm run dev
 | `GET` | `/api/me` | Session check: `{authenticated, admin}` |
 | `POST` | `/api/telemetry/hello` · `/location` | Device details and the location-consent answer |
 | `GET` | `/api/announcement` | The admin's banner, if any |
-| `GET` | `/api/admin/dashboard` · `/insights` · `/downloads` · `/downloads.csv` · `/devices/{id}` | Admin panel data (admin session only) |
+| `GET` | `/api/admin/dashboard` · `/insights` · `/downloads` · `/downloads/export` (CSV) · `/devices/{id}` | Admin panel data (admin session only) |
 | `POST` | `/api/admin/devices/{id}` · `/ips/block` · `/ips/unlock` · `/jobs/{id}/cancel` · `/announcement` | Admin actions, each written to the activity log |
 
 ---
