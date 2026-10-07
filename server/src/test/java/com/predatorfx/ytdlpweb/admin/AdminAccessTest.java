@@ -426,6 +426,14 @@ class AdminAccessTest {
                 DownloadController.class.getMethod("health"))));
     }
 
+    /** The admin may type an IPv6 address shortened; the block must still hit its long form. */
+    @Test
+    void ipv6BlocksMatchAnySpelling() throws Exception {
+        activity.setIpBlocked("2001:db8::7", true);
+        mvc.perform(get("/api/me").with(from("127.0.0.1")).header("CF-Connecting-IP", "2001:db8:0:0:0:0:0:7"))
+                .andExpect(status().isForbidden());
+    }
+
     /** Cloudflare caches some file types by default; nothing from the API may sit in a shared cache. */
     @Test
     void apiAnswersAreNeverCached() throws Exception {

@@ -6,6 +6,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 
 import java.time.Duration;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -35,6 +36,15 @@ class AdminAuthServiceTest {
         assertTrue(admin.isEnabled());
         assertTrue(admin.checkCredentials("TestAdmin", "S3cret-pass!"));
         assertFalse(admin.checkCredentials("testadmin", "S3cret-pass!"));
+    }
+
+    /** The slow hash check runs a few at a time; past that the login is told to come back, not queued forever. */
+    @Test
+    void busyWhenEveryCheckSlotIsTaken() {
+        AdminAuthService full = new AdminAuthService(HASH, clock, 0, java.time.Duration.ofMillis(50));
+        assertEquals(AdminAuthService.Check.BUSY, full.check("TestAdmin", "S3cret-pass!"));
+        assertEquals(AdminAuthService.Check.MATCH, admin.check("TestAdmin", "S3cret-pass!"));
+        assertEquals(AdminAuthService.Check.MISMATCH, admin.check("TestAdmin", "wrong"));
     }
 
     @Test

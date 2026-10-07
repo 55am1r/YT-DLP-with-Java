@@ -122,7 +122,7 @@ public class AdminController {
 
     @PostMapping("/ips/block")
     public Map<String, Object> blockIp(@RequestBody(required = false) IpRequest body, HttpServletRequest req) {
-        String ip = body == null || body.ip() == null ? null : body.ip().strip();
+        String ip = body == null || body.ip() == null ? null : ClientInfo.canonical(body.ip().strip());
         boolean block = body == null || body.blocked() == null || body.blocked();
         if (!ClientInfo.isIpLiteral(ip)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "That isn't an IP address");
@@ -139,7 +139,8 @@ public class AdminController {
     @PostMapping("/ips/unlock")
     public Map<String, Object> unlock(@RequestBody(required = false) IpRequest body, HttpServletRequest req) {
         String ip = body == null || body.ip() == null ? null : body.ip().strip();
-        if (!ClientInfo.isIpLiteral(ip)) {
+        // A locked IPv6 range is shown (and unlocked) as "2001:db8:1:2::/64".
+        if (!ClientInfo.isIpLiteral(ip) && (ip == null || !ip.matches("[0-9a-f:]+::/64"))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "That isn't an IP address");
         }
         guard.unlock(ip);

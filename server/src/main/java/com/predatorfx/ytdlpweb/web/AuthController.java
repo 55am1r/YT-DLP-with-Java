@@ -58,17 +58,35 @@ public class AuthController {
         String device = ActivityFilter.deviceId(req);
         String agent = req.getHeader(HttpHeaders.USER_AGENT);
 
-        long wait = guard.lockedForMillis(client.ip());
-        if (wait > 0) {
-            long minutes = Math.max(1, (wait + 59_999) / 60_000);
-            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of("ok", false, "error",
-                    "Too many wrong attempts. Try again in " + minutes + (minutes == 1 ? " minute." : " minutes.")));
+        if (!guard.tryBegin(client.ip())) {
+            long wait = guard.lockedForMillis(client.ip());
+            if (wait > 0) {
+                long minutes = Math.max(1, (wait + 59_999) / 60_000);
+                return tooMany("Too many wrong attempts. Try again in " + minutes + (minutes == 1 ? " minute." : " minutes."));
+            }
+            return tooMany("Too many attempts at once — wait a moment and try again.");
         }
 
         String user = body == null ? null : body.username();
         String pass = body == null ? null : body.password();
-        if (admin.checkCredentials(user, pass)) {
-            guard.recordSuccess(client.ip());
+        // The team login is a plain comparison; only what isn't the team login pays for the
+        // deliberately slow admin hash, so teammates never wait on it. (The admin credentials
+        // must therefore differ from the team's.)
+        if (auth.checkCredentials(user, pass)) {
+            guard.succeeded(client.ip());
+            activity.touch(device, client, agent, false);
+            activity.recordEvent(ActivityEvent.LOGIN, device, client.ip(), null, null, null);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.SET_COOKIE, auth.sessionCookie().toString())
+                    .body(Map.of("ok", true, "admin", false));
+        }
+        AdminAuthService.Check check = admin.check(user, pass);
+        if (check == AdminAuthService.Check.BUSY) {
+            guard.released(client.ip());
+            return tooMany("The server is busy — try again in a moment.");
+        }
+        if (check == AdminAuthService.Check.MATCH) {
+            guard.succeeded(client.ip());
             activity.touch(device, client, agent, true);
             activity.recordEvent(ActivityEvent.ADMIN_LOGIN, device, client.ip(), null, null, null);
             return ResponseEntity.ok()
@@ -76,22 +94,18 @@ public class AuthController {
                     .header(HttpHeaders.SET_COOKIE, auth.sessionCookie().toString())
                     .body(Map.of("ok", true, "admin", true));
         }
-        if (auth.checkCredentials(user, pass)) {
-            guard.recordSuccess(client.ip());
-            activity.touch(device, client, agent, false);
-            activity.recordEvent(ActivityEvent.LOGIN, device, client.ip(), null, null, null);
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.SET_COOKIE, auth.sessionCookie().toString())
-                    .body(Map.of("ok", true, "admin", false));
-        }
 
         // Nothing typed is stored — only that a wrong login came from here.
-        boolean locked = guard.recordFailure(client.ip());
+        boolean locked = guard.failed(client.ip());
         activity.recordEvent(ActivityEvent.LOGIN_FAILED, device, client.ip(), null, null, null);
         if (locked) {
             activity.recordEvent(ActivityEvent.LOCKED_OUT, device, client.ip(), "Locked out for 10 minutes", null, null);
         }
         return ResponseEntity.status(401).body(Map.of("ok", false, "error", "Wrong username or password"));
+    }
+
+    private static ResponseEntity<Map<String, Object>> tooMany(String message) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of("ok", false, "error", message));
     }
 
     @PostMapping("/logout")

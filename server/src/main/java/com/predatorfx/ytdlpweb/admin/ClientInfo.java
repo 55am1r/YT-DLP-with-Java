@@ -30,7 +30,7 @@ public record ClientInfo(String ip, String via) {
     }
 
     public static ClientInfo resolve(String remoteAddr, String cfConnectingIp, String xForwardedFor) {
-        String socket = normalize(remoteAddr);
+        String socket = canonical(normalize(remoteAddr));
         if (socket == null) {
             return new ClientInfo("unknown", "internet");
         }
@@ -67,6 +67,20 @@ public record ClientInfo(String ip, String via) {
         return parse(s) != null;
     }
 
+    /**
+     * The one way an address is written here ("2001:db8:0:0:0:0:0:1", never "2001:DB8::1"),
+     * so blocks and lockouts can compare text. Anything that isn't an IP comes back unchanged.
+     */
+    public static String canonical(String ip) {
+        InetAddress a = parse(ip);
+        if (a == null) {
+            return ip;
+        }
+        String s = a.getHostAddress();
+        int scope = s.indexOf('%');
+        return scope >= 0 ? s.substring(0, scope) : s;
+    }
+
     private static boolean isLoopback(String ip) {
         InetAddress a = parse(ip);
         return a != null && a.isLoopbackAddress();
@@ -89,7 +103,7 @@ public record ClientInfo(String ip, String via) {
         }
         int comma = header.indexOf(',');
         String ip = normalize(comma >= 0 ? header.substring(0, comma) : header);
-        return ip != null && isIpLiteral(ip) ? ip : null;
+        return ip != null && isIpLiteral(ip) ? canonical(ip) : null;
     }
 
     private static String normalize(String ip) {

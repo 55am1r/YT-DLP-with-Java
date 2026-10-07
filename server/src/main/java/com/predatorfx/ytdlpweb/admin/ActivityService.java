@@ -101,7 +101,7 @@ public class ActivityService {
                 downloads.put(r.getJobId(), r);
             }
             events.addAll(loaded.events());
-            blockedIps.addAll(loaded.settings().blockedIps());
+            loaded.settings().blockedIps().forEach(ip -> blockedIps.add(ClientInfo.canonical(ip)));
             announcement = loaded.settings().announcement();
         }
         compact(); // also writes the interrupted records back
@@ -358,6 +358,7 @@ public class ActivityService {
         if (!ClientInfo.isIpLiteral(ip)) {
             throw new IllegalArgumentException("Not an IP address");
         }
+        ip = ClientInfo.canonical(ip); // compared as text with what ClientInfo reports
         ActivityStore.Settings settings;
         synchronized (lock) {
             if (blocked) {
