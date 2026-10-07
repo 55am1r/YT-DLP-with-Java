@@ -19,6 +19,19 @@ app.auth.enabled=true
 app.auth.username=team
 app.auth.password=CHANGE_ME
 
+# --- Admin panel: the owner signs in on the same login screen with their own credentials ---
+# Only a salted hash is stored here — never the plaintext. Generate the line with:
+#   python3 -c 'import hashlib,os,base64,getpass;u=input("Admin username: ");p=getpass.getpass("Admin password: ");s=os.urandom(16);n=210000;h=hashlib.pbkdf2_hmac("sha256",(u+"\n"+p).encode(),s,n);print("app.admin.credential=pbkdf2-sha256$%d$%s$%s"%(n,base64.b64encode(s).decode(),base64.b64encode(h).decode()))'
+# Both username and password are case-sensitive. Leave empty to turn the admin panel off.
+app.admin.credential=
+# Where the admin records (devices, downloads, logins) are kept. NOT the work dir, which is
+# wiped on every restart. Default: ~/.ytdlp-web/admin-data
+#app.admin.data-dir=/absolute/path/to/admin-data
+# Records older than this many days are deleted (nightly).
+app.admin.retention-days=365
+# Approximate locations from IP addresses (ipwho.is, falling back to ipinfo.io). false = never ask.
+app.geo.enabled=true
+
 # --- yt-dlp integration ---
 # Use ABSOLUTE paths: under launchd (LaunchAgent) Homebrew's bin is NOT on PATH, and
 # Java's ProcessBuilder resolves the program name against the JVM's inherited PATH
