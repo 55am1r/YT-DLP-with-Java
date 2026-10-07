@@ -25,6 +25,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api")
+@PublicEndpoint
 public class AuthController {
 
     private final AuthService auth;

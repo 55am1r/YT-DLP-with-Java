@@ -2,6 +2,7 @@ package com.predatorfx.ytdlpweb.admin;
 
 import com.predatorfx.ytdlpweb.model.Job;
 import com.predatorfx.ytdlpweb.service.JobService;
+import com.predatorfx.ytdlpweb.web.AdminOnly;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -31,6 +32,7 @@ import java.util.Objects;
  */
 @RestController
 @RequestMapping("/api/admin")
+@AdminOnly
 public class AdminController {
 
     private final AdminReports reports;
@@ -70,8 +72,11 @@ public class AdminController {
         return reports.downloads(new AdminReports.DownloadFilter(q, device, status, kind, days), offset, limit);
     }
 
-    /** The same log as a spreadsheet (with a BOM so Excel reads Telugu and Hindi titles right). */
-    @GetMapping("/downloads.csv")
+    /**
+     * The same log as a spreadsheet (with a BOM so Excel reads Telugu and Hindi titles right).
+     * No ".csv" in the path: Cloudflare caches some file extensions by default.
+     */
+    @GetMapping("/downloads/export")
     public ResponseEntity<byte[]> downloadsCsv(
             @RequestParam(required = false) String q, @RequestParam(required = false) String device,
             @RequestParam(required = false) String status, @RequestParam(required = false) String kind,

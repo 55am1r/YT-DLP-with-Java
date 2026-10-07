@@ -40,7 +40,7 @@ public class AuthFilter implements Filter {
             if (admin.validSession(request)) {
                 chain.doFilter(req, res);
             } else {
-                deny(response, "{\"error\":\"admin login required\"}");
+                deny(response, "admin login required");
             }
             return;
         }
@@ -48,13 +48,14 @@ public class AuthFilter implements Filter {
             chain.doFilter(req, res);
             return;
         }
-        deny(response, "{\"error\":\"login required\"}");
+        deny(response, "login required");
     }
 
-    private static void deny(HttpServletResponse response, String json) throws IOException {
+    /** 401 with a small JSON body — shared with {@link AccessInterceptor}. */
+    static void deny(HttpServletResponse response, String error) throws IOException {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType("application/json");
-        response.getWriter().write(json);
+        response.getWriter().write("{\"error\":\"" + error + "\"}");
     }
 
     private static boolean isOpen(String path) {

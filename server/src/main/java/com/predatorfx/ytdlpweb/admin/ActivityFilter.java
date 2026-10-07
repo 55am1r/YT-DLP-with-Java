@@ -63,6 +63,10 @@ public class ActivityFilter implements Filter {
             return;
         }
 
+        // Nothing from the API belongs in a browser or Cloudflare cache — it is per-user, and
+        // some of it (the CSV export, files) would otherwise be cacheable by extension.
+        response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store, private");
+
         ClientInfo client = ClientInfo.of(request);
         request.setAttribute(CLIENT_ATTR, client);
         String deviceId = cookieDevice(request);
@@ -75,15 +79,20 @@ public class ActivityFilter implements Filter {
 
         boolean isAdmin = admin.validSession(request);
         if (!isAdmin && !path.equals("/api/health") && activity.isBlocked(deviceId, client.ip())) {
-            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-            response.setContentType("application/json");
-            response.getWriter().write("{\"error\":\"Access to EZ-Tube has been blocked by the admin.\",\"blocked\":true}");
+            refuseBlocked(response);
             return;
         }
         if (isAdmin || auth.validCookie(request)) {
             activity.touch(deviceId, client, request.getHeader(HttpHeaders.USER_AGENT), isAdmin);
         }
         chain.doFilter(req, res);
+    }
+
+    /** The 403 a blocked device or IP gets — also used by the MVC-level gate. */
+    public static void refuseBlocked(HttpServletResponse response) throws IOException {
+        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        response.setContentType("application/json");
+        response.getWriter().write("{\"error\":\"Access to EZ-Tube has been blocked by the admin.\",\"blocked\":true}");
     }
 
     /** This request's device id — set by the filter, or read from the cookie when it didn't run. */

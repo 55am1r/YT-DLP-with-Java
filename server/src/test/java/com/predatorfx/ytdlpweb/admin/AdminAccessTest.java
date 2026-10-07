@@ -4,23 +4,31 @@ import com.predatorfx.ytdlpweb.model.DownloadRequest;
 import com.predatorfx.ytdlpweb.model.Job;
 import com.predatorfx.ytdlpweb.model.JobStatus;
 import com.predatorfx.ytdlpweb.service.JobFinishedEvent;
+import com.predatorfx.ytdlpweb.web.AccessInterceptor;
+import com.predatorfx.ytdlpweb.web.DownloadController;
 import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.web.method.HandlerMethod;
 
+import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -59,9 +67,26 @@ class AdminAccessTest {
     @Autowired
     ApplicationEventPublisher events;
 
+    @Autowired
+    AccessInterceptor access;
+
+    @Autowired
+    AdminController adminController;
+
+    @Autowired
+    DownloadController downloadController;
+
     private static RequestPostProcessor from(String ip) {
         return r -> {
             r.setRemoteAddr(ip);
+            return r;
+        };
+    }
+
+    /** The request path exactly as Tomcat would hand it over, undecoded (URI.create reads "//x" as a host). */
+    private static RequestPostProcessor rawPath(String path) {
+        return r -> {
+            r.setRequestURI(path);
             return r;
         };
     }
@@ -310,7 +335,7 @@ class AdminAccessTest {
     @Test
     void csvExportIsAnAttachment() throws Exception {
         MvcResult admin = login("TestAdmin", "S3cret-pass!", "203.0.113.19");
-        MvcResult csv = mvc.perform(get("/api/admin/downloads.csv").with(from("203.0.113.19"))
+        MvcResult csv = mvc.perform(get("/api/admin/downloads/export").with(from("203.0.113.19"))
                 .cookie(admin.getResponse().getCookies())).andReturn();
 
         assertEquals(200, csv.getResponse().getStatus());
@@ -325,6 +350,90 @@ class AdminAccessTest {
         mvc.perform(get("/api/admin/devices/no-such-device-000").with(from("203.0.113.20"))
                         .cookie(admin.getResponse().getCookies()))
                 .andExpect(status().isNotFound());
+    }
+
+    /**
+     * The filters read the raw path; Spring routes on the decoded one. A path spelled with
+     * percent-escapes, ';' parameters, '//' or dot segments must never slip between the two.
+     */
+    @Test
+    void oddlySpelledPathsAreRefusedBeforeAnyGate() throws Exception {
+        for (String path : List.of("/%61pi/admin/dashboard", "/api;x/admin/dashboard", "/api/%61dmin/dashboard",
+                "/api/admin;x/dashboard", "//api/admin/dashboard", "/x/../api/admin/dashboard",
+                "/api/admin/./dashboard", "/api\\admin/dashboard", "/api%5Cadmin/dashboard")) {
+            int status = mvc.perform(get("/").with(rawPath(path)).with(from("203.0.113.22")))
+                    .andReturn().getResponse().getStatus();
+            assertEquals(400, status, path);
+        }
+        MvcResult team = login("team", "team-pass", "203.0.113.22");
+        assertEquals(400, mvc.perform(get(URI.create("/api/admin;x/dashboard")).with(from("203.0.113.22"))
+                .cookie(team.getResponse().getCookies())).andReturn().getResponse().getStatus());
+
+        Announcement before = activity.announcement();
+        mvc.perform(post(URI.create("/%61pi/admin/announcement")).with(from("203.0.113.22"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"text\":\"Log in again at evil.example\"}"))
+                .andExpect(status().isBadRequest());
+        assertEquals(before, activity.announcement());
+    }
+
+    @Test
+    void oddlySpelledPathsCannotDodgeABlock() throws Exception {
+        MvcResult team = login("team", "team-pass", "203.0.113.23");
+        String device = team.getResponse().getCookie(ActivityFilter.DEVICE_COOKIE).getValue();
+        activity.updateDevice(device, null, true);
+
+        int status = mvc.perform(get(URI.create("/%61pi/me")).with(from("203.0.113.23"))
+                .cookie(team.getResponse().getCookies())).andReturn().getResponse().getStatus();
+
+        assertEquals(400, status);
+    }
+
+    /** Second line of defence: the admin controller's handlers demand an admin session however they were reached. */
+    @Test
+    void adminHandlersCheckTheSessionThemselves() throws Exception {
+        HandlerMethod dashboard = new HandlerMethod(adminController,
+                AdminController.class.getMethod("dashboard", HttpServletRequest.class));
+
+        MockHttpServletResponse anonymous = new MockHttpServletResponse();
+        assertFalse(access.preHandle(new MockHttpServletRequest(), anonymous, dashboard));
+        assertEquals(401, anonymous.getStatus());
+
+        MockHttpServletRequest teamOnly = new MockHttpServletRequest();
+        teamOnly.setCookies(login("team", "team-pass", "203.0.113.24").getResponse().getCookies());
+        MockHttpServletResponse teamResponse = new MockHttpServletResponse();
+        assertFalse(access.preHandle(teamOnly, teamResponse, dashboard));
+        assertEquals(401, teamResponse.getStatus());
+
+        MockHttpServletRequest admin = new MockHttpServletRequest();
+        admin.setCookies(login("TestAdmin", "S3cret-pass!", "203.0.113.24").getResponse().getCookies());
+        assertTrue(access.preHandle(admin, new MockHttpServletResponse(), dashboard));
+    }
+
+    /** The second gate also refuses blocked devices, whatever path reached the handler — except the health check. */
+    @Test
+    void secondGateRefusesBlockedDevicesToo() throws Exception {
+        MvcResult team = login("team", "team-pass", "203.0.113.26");
+        activity.updateDevice(team.getResponse().getCookie(ActivityFilter.DEVICE_COOKIE).getValue(), null, true);
+        MockHttpServletRequest req = new MockHttpServletRequest();
+        req.setRemoteAddr("203.0.113.26");
+        req.setCookies(team.getResponse().getCookies());
+
+        MockHttpServletResponse jobs = new MockHttpServletResponse();
+        assertFalse(access.preHandle(req, jobs, new HandlerMethod(downloadController,
+                DownloadController.class.getMethod("list"))));
+        assertEquals(403, jobs.getStatus());
+        assertTrue(access.preHandle(req, new MockHttpServletResponse(), new HandlerMethod(downloadController,
+                DownloadController.class.getMethod("health"))));
+    }
+
+    /** Cloudflare caches some file types by default; nothing from the API may sit in a shared cache. */
+    @Test
+    void apiAnswersAreNeverCached() throws Exception {
+        MvcResult admin = login("TestAdmin", "S3cret-pass!", "203.0.113.25");
+        assertEquals("no-store, private", mvc.perform(get("/api/admin/downloads/export").with(from("203.0.113.25"))
+                .cookie(admin.getResponse().getCookies())).andReturn().getResponse().getHeader("Cache-Control"));
+        assertEquals("no-store, private", mvc.perform(get("/api/me").with(from("203.0.113.25")))
+                .andReturn().getResponse().getHeader("Cache-Control"));
     }
 
     @Test
