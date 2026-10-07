@@ -8,6 +8,7 @@ import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -39,6 +40,7 @@ public class JobService {
 
     private final YtDlpService ytdlp;
     private final YtDlpUpdateService updates;
+    private final ApplicationEventPublisher events;
 
     @Value("${ytdlp.max-concurrent-jobs:3}")
     private int maxConcurrent;
@@ -50,9 +52,10 @@ public class JobService {
     private final Map<String, Job> jobs = new ConcurrentHashMap<>();
     private final Map<String, List<SseEmitter>> emitters = new ConcurrentHashMap<>();
 
-    public JobService(YtDlpService ytdlp, YtDlpUpdateService updates) {
+    public JobService(YtDlpService ytdlp, YtDlpUpdateService updates, ApplicationEventPublisher events) {
         this.ytdlp = ytdlp;
         this.updates = updates;
+        this.events = events;
     }
 
     @PostConstruct
@@ -220,6 +223,7 @@ public class JobService {
             job.setFinishedAt(System.currentTimeMillis());
             push(job);
             completeEmitters(id);
+            publishFinished(job);
         }
         return true;
     }
@@ -255,6 +259,18 @@ public class JobService {
             }
         } finally {
             completeEmitters(job.getId());
+            if (isTerminal(job.getStatus())) {
+                publishFinished(job);
+            }
+        }
+    }
+
+    /** Let the admin records know how the job ended. Never allowed to disturb the worker. */
+    private void publishFinished(Job job) {
+        try {
+            events.publishEvent(new JobFinishedEvent(job));
+        } catch (RuntimeException e) {
+            log.warn("Could not report the end of job {}: {}", job.getId(), e.toString());
         }
     }
 

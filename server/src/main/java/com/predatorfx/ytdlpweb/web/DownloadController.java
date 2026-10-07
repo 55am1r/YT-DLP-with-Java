@@ -1,5 +1,8 @@
 package com.predatorfx.ytdlpweb.web;
 
+import com.predatorfx.ytdlpweb.admin.ActivityEvent;
+import com.predatorfx.ytdlpweb.admin.ActivityFilter;
+import com.predatorfx.ytdlpweb.admin.ActivityService;
 import com.predatorfx.ytdlpweb.model.AnalyzeResult;
 import com.predatorfx.ytdlpweb.model.CodecOption;
 import com.predatorfx.ytdlpweb.model.DownloadRequest;
@@ -10,10 +13,12 @@ import com.predatorfx.ytdlpweb.service.CodecCatalog;
 import com.predatorfx.ytdlpweb.service.JobService;
 import com.predatorfx.ytdlpweb.service.YtDlpService;
 import com.predatorfx.ytdlpweb.service.YtDlpUpdateService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.MediaTypeFactory;
@@ -44,25 +49,30 @@ public class DownloadController {
     private final JobService jobs;
     private final YtDlpUpdateService updates;
     private final CodecCatalog codecs;
+    private final ActivityService activity;
 
     public DownloadController(YtDlpService ytdlp, JobService jobs, YtDlpUpdateService updates,
-                              CodecCatalog codecs) {
+                              CodecCatalog codecs, ActivityService activity) {
         this.ytdlp = ytdlp;
         this.jobs = jobs;
         this.updates = updates;
         this.codecs = codecs;
+        this.activity = activity;
     }
 
     public record UrlRequest(String url) {}
 
     /** Probe a URL: title, thumbnail, duration, playlist?, quality choices. */
     @PostMapping("/analyze")
-    public AnalyzeResult analyze(@RequestBody UrlRequest body) {
+    public AnalyzeResult analyze(@RequestBody UrlRequest body, HttpServletRequest http) {
         if (body == null || body.url() == null || body.url().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A URL is required");
         }
         try {
-            return ytdlp.analyze(body.url().trim());
+            AnalyzeResult result = ytdlp.analyze(body.url().trim());
+            activity.recordEvent(ActivityEvent.ANALYZE, ActivityFilter.deviceId(http),
+                    ActivityFilter.client(http).ip(), null, body.url().trim(), result.title());
+            return result;
         } catch (IOException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
@@ -78,7 +88,8 @@ public class DownloadController {
      */
     @PostMapping("/jobs")
     public ResponseEntity<Object> start(@RequestBody DownloadRequest req,
-                                        @RequestParam(defaultValue = "false") boolean force) {
+                                        @RequestParam(defaultValue = "false") boolean force,
+                                        HttpServletRequest http) {
         if (req == null || req.url() == null || req.url().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A URL is required");
         }
@@ -95,7 +106,9 @@ public class DownloadController {
                         .body(Map.of("duplicate", true, "job", existing));
             }
         }
-        return ResponseEntity.ok(jobs.submit(req));
+        Job job = jobs.submit(req);
+        activity.recordDownload(job, ActivityFilter.deviceId(http), ActivityFilter.client(http));
+        return ResponseEntity.ok(job);
     }
 
     /** Compression choices this machine's ffmpeg can actually deliver. */
@@ -164,7 +177,7 @@ public class DownloadController {
 
     /** Stream the finished file to the requester's browser as a download. */
     @GetMapping("/jobs/{id}/file")
-    public ResponseEntity<Resource> file(@PathVariable String id) throws IOException {
+    public ResponseEntity<Resource> file(@PathVariable String id, HttpServletRequest http) throws IOException {
         Job job = jobs.get(id);
         if (job == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No such job");
@@ -193,6 +206,12 @@ public class DownloadController {
         headers.set(HttpHeaders.ACCEPT_RANGES, "bytes");
         headers.setETag("\"" + id + "-" + size + "\"");
         headers.setLastModified(Files.getLastModifiedTime(path).toMillis());
+
+        // A GET is a save to this device (HEAD is only the "still there?" check; resumed
+        // range requests from the same device count once).
+        if (HttpMethod.GET.matches(http.getMethod())) {
+            activity.recordSave(id, ActivityFilter.deviceId(http));
+        }
 
         return ResponseEntity.ok()
                 .headers(headers)
