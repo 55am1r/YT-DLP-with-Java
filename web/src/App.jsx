@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import Header from './components/Header'
 import UrlBar from './components/UrlBar'
 import PageTabs from './components/PageTabs'
@@ -8,11 +8,18 @@ import DownloadsPanel from './components/DownloadsPanel'
 import ConfirmDialog from './components/ConfirmDialog'
 import ScrollFab from './components/ScrollFab'
 import Login from './components/Login'
-import { analyze, startJob, checkAuth, clearJobs, getCodecs, retryJob, fileAvailable, logout as apiLogout } from './api'
+import AnnouncementBanner from './components/AnnouncementBanner'
+import LocationPrompt from './components/LocationPrompt'
+import { analyze, startJob, checkAuth, clearJobs, getCodecs, retryJob, fileAvailable, logout as apiLogout, sendHello } from './api'
 import { useAutoSave } from './autosave'
+import { helloInfo, locationPermission } from './telemetry'
+
+// Its own chunk: only the owner's browser ever downloads the admin panel.
+const AdminPanel = lazy(() => import('./admin/AdminPanel'))
 
 let seq = 0
 const STORE_KEY = 'ez-session-v1'
+const VIEW_KEY = 'ez-view'
 const ACTIVE = new Set(['QUEUED', 'CHECKING_UPDATES', 'ANALYZING', 'DOWNLOADING', 'PAUSED', 'PROCESSING', 'COMPRESSING', 'PACKAGING'])
 const TERMINAL = ['COMPLETED', 'FAILED', 'CANCELED']
 const isMobile = () => window.innerWidth < 750
@@ -35,8 +42,22 @@ function loadSession() {
   }
 }
 
+/** Where an admin lands: back where they were this session, else the admin panel. */
+function viewFor(session) {
+  if (!session.admin) return 'app'
+  try {
+    return sessionStorage.getItem(VIEW_KEY) === 'app' ? 'app' : 'admin'
+  } catch {
+    return 'admin'
+  }
+}
+
 export default function App() {
   const [authed, setAuthed] = useState(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [view, setView] = useState('app')        // an admin can switch between 'admin' and 'app'
+  const [blocked, setBlocked] = useState(false)  // the admin has turned this device/IP away
+  const [loginNote, setLoginNote] = useState(null)
   const [theme, setTheme] = useState(() => localStorage.getItem('ez-theme') || 'dark')
   const restored = useRef(loadSession())
   const [pages, setPages] = useState(restored.current.pages)
@@ -76,11 +97,25 @@ export default function App() {
   }, [theme])
 
   useEffect(() => {
-    checkAuth().then(setAuthed).catch(() => setAuthed(false))
+    checkAuth()
+      .then((s) => {
+        setBlocked(s.blocked)
+        setIsAdmin(s.admin)
+        setView(viewFor(s))
+        setAuthed(s.authenticated)
+      })
+      .catch(() => setAuthed(false))
   }, [])
 
   useEffect(() => {
     if (authed) getCodecs().then(setCodecs).catch(() => setCodecs([]))
+  }, [authed])
+
+  // Tell the admin records about this browser once per sign-in: time zone, language, screen,
+  // and whether location can be asked for here.
+  useEffect(() => {
+    if (!authed) return
+    locationPermission().then((permission) => sendHello({ ...helloInfo(), permission }))
   }, [authed])
 
   // Persist the whole session so a refresh — or a phone reopening the site — comes back
@@ -144,6 +179,7 @@ export default function App() {
 
   function handleAuthError(e) {
     if (e && e.status === 401) { setAuthed(false); return true }
+    if (e && e.status === 403) { setBlocked(true); setAuthed(false); return true }
     return false
   }
 
@@ -161,6 +197,7 @@ export default function App() {
       try {
         const res = await fetch(`/api/jobs/${id}`)
         if (res.status === 401) { stop(); setAuthed(false); return }
+        if (res.status === 403) { stop(); setBlocked(true); setAuthed(false); return }
         if (res.status === 404) {
           stop()
           setPages((prev) => prev.map((p) => ({
@@ -344,19 +381,93 @@ export default function App() {
   async function doLogout() {
     await apiLogout()
     localStorage.removeItem(STORE_KEY)
+    try { sessionStorage.removeItem(VIEW_KEY) } catch { /* private mode */ }
     timers.current.forEach((t) => t.close())
     setPages([])
     setActiveId(null)
+    setIsAdmin(false)
+    setView('app')
     setAuthed(false)
   }
 
   /** Prompt first — logout ends the session (tabs, settings, history all gone). */
   function onLogout() { setLoggingOut(true) }
 
+  const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))
+
+  function openView(next) {
+    setView(next)
+    try { sessionStorage.setItem(VIEW_KEY, next) } catch { /* private mode */ }
+  }
+
+  // The admin session ran out (2 h idle, 12 h at most). Sign out completely, so the admin
+  // login is asked for again rather than quietly dropping to the team view.
+  const onAdminSessionLost = useCallback(() => {
+    apiLogout().finally(() => {
+      setIsAdmin(false)
+      setView('app')
+      setLoginNote('Your admin session has ended — sign in again.')
+      setAuthed(false)
+    })
+  }, [])
+
+  function onLoggedIn(result) {
+    setBlocked(false)
+    setLoginNote(null)
+    setIsAdmin(result.admin)
+    setView(result.admin ? 'admin' : 'app')
+    setAuthed(true)
+  }
+
   if (authed === null) {
     return <div className="app"><div className="container loading muted">Loading…</div></div>
   }
-  if (!authed) return <Login onSuccess={() => setAuthed(true)} />
+  if (!authed) return <Login onSuccess={onLoggedIn} blocked={blocked} note={loginNote} />
+
+  const logoutDialog = loggingOut && (() => {
+    // Logout is always risky — it ends the session (tabs + settings + history
+    // all lost). If anything is also running or unsaved, that's added on top.
+    const running = pages.some((p) => p.jobs.some((j) => ACTIVE.has(j.status)))
+    const unsaved = pages.some((p) => p.jobs.some((j) => j.status === 'COMPLETED' && !j.saved))
+    const message =
+      running && unsaved
+        ? 'A download is still in progress and a finished file hasn’t been saved yet. Logging out cancels the download, discards the file and ends this session.'
+      : running
+        ? 'A download is still in progress. Logging out cancels it and ends this session.'
+      : unsaved
+        ? 'A finished file hasn’t been saved yet. Logging out discards it and ends this session.'
+      :   'Logging out ends this session. Your open tabs and download history will be lost.'
+    return (
+      <ConfirmDialog
+        title="Log out?"
+        message={message}
+        detail="Do you still want to continue?"
+        cancelLabel="Stay logged in"
+        confirmLabel="Log out"
+        headerIcon="fa-right-from-bracket"
+        confirmIcon="fa-right-from-bracket"
+        onCancel={() => setLoggingOut(false)}
+        onConfirm={() => { setLoggingOut(false); doLogout() }}
+      />
+    )
+  })()
+
+  if (isAdmin && view === 'admin') {
+    return (
+      <>
+        <Suspense fallback={<div className="app"><div className="container loading muted">Loading the admin panel…</div></div>}>
+          <AdminPanel
+            theme={theme}
+            onToggleTheme={toggleTheme}
+            onOpenApp={() => openView('app')}
+            onLogout={onLogout}
+            onSessionLost={onAdminSessionLost}
+          />
+        </Suspense>
+        {logoutDialog}
+      </>
+    )
+  }
 
   const dupe = dupes[0]
 
@@ -365,11 +476,14 @@ export default function App() {
       <div className="container">
         <Header
           theme={theme}
-          onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+          onToggleTheme={toggleTheme}
           onLogout={onLogout}
           onOpenDownloads={openSheet}
           downloadCount={active ? active.jobs.length : 0}
+          onOpenAdmin={isAdmin ? () => openView('admin') : undefined}
         />
+        <AnnouncementBanner />
+        {!isAdmin && <LocationPrompt />}
         <UrlBar onAnalyze={onAnalyze} analyzing={analyzing} />
         {error && <div className="error">{error}</div>}
 
@@ -474,33 +588,7 @@ export default function App() {
         />
       )}
 
-      {loggingOut && (() => {
-        // Logout is always risky — it ends the session (tabs + settings + history
-        // all lost). If anything is also running or unsaved, that's added on top.
-        const running = pages.some((p) => p.jobs.some((j) => ACTIVE.has(j.status)))
-        const unsaved = pages.some((p) => p.jobs.some((j) => j.status === 'COMPLETED' && !j.saved))
-        const message =
-          running && unsaved
-            ? 'A download is still in progress and a finished file hasn’t been saved yet. Logging out cancels the download, discards the file and ends this session.'
-          : running
-            ? 'A download is still in progress. Logging out cancels it and ends this session.'
-          : unsaved
-            ? 'A finished file hasn’t been saved yet. Logging out discards it and ends this session.'
-          :   'Logging out ends this session. Your open tabs and download history will be lost.'
-        return (
-          <ConfirmDialog
-            title="Log out?"
-            message={message}
-            detail="Do you still want to continue?"
-            cancelLabel="Stay logged in"
-            confirmLabel="Log out"
-            headerIcon="fa-right-from-bracket"
-            confirmIcon="fa-right-from-bracket"
-            onCancel={() => setLoggingOut(false)}
-            onConfirm={() => { setLoggingOut(false); doLogout() }}
-          />
-        )
-      })()}
+      {logoutDialog}
 
       {clearing2 && (
         <ConfirmDialog

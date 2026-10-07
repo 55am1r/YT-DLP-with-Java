@@ -158,11 +158,16 @@ public class ActivityService {
         if (deviceId == null || hello == null) {
             return;
         }
+        String before;
+        String after;
+        String ip;
         synchronized (lock) {
             DeviceRecord d = devices.get(deviceId);
             if (d == null) {
                 return;
             }
+            before = d.getConsent();
+            ip = d.getLastIp();
             d.setTimezone(clip(hello.timezone(), 64));
             d.setLanguage(clip(hello.language(), 35));
             d.setScreen(clip(hello.screen(), 20));
@@ -177,7 +182,12 @@ public class ActivityService {
             } else if (!cannotAsk && DeviceRecord.CONSENT_UNAVAILABLE.equals(d.getConsent())) {
                 d.setConsent(DeviceRecord.CONSENT_UNKNOWN); // reachable over HTTPS now: it can be asked
             }
+            after = d.getConsent();
             devicesDirty = true;
+        }
+        // Turning location off in the browser withdraws consent — log it like an answer on the card.
+        if (DeviceRecord.CONSENT_DENIED.equals(after) && !after.equals(before)) {
+            recordEvent(ActivityEvent.LOCATION, deviceId, ip, after, null, null);
         }
     }
 

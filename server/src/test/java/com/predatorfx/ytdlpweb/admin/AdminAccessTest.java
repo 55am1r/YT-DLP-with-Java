@@ -217,6 +217,25 @@ class AdminAccessTest {
         assertNull(d.getLat());
     }
 
+    /** Location turned off in the browser later: the stored position goes, and the admin sees why. */
+    @Test
+    void browserDenialWithdrawsAndLogsIt() throws Exception {
+        MvcResult team = login("team", "team-pass", "203.0.113.21");
+        Cookie[] c = team.getResponse().getCookies();
+        String device = team.getResponse().getCookie(ActivityFilter.DEVICE_COOKIE).getValue();
+        mvc.perform(post("/api/telemetry/location").with(from("203.0.113.21")).cookie(c).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"lat\":17.36,\"lon\":78.47,\"accuracy\":12,\"outcome\":\"granted\"}")).andExpect(status().isOk());
+
+        mvc.perform(post("/api/telemetry/hello").with(from("203.0.113.21")).cookie(c).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"timezone\":\"Asia/Kolkata\",\"secure\":true,\"permission\":\"denied\"}")).andExpect(status().isOk());
+
+        DeviceRecord d = activity.device(device).orElseThrow();
+        assertEquals(DeviceRecord.CONSENT_DENIED, d.getConsent());
+        assertNull(d.getLat());
+        assertTrue(activity.events().stream().anyMatch(e -> ActivityEvent.LOCATION.equals(e.type())
+                && device.equals(e.deviceId()) && DeviceRecord.CONSENT_DENIED.equals(e.detail())));
+    }
+
     @Test
     void telemetryNeedsALogin() throws Exception {
         mvc.perform(post("/api/telemetry/location").with(from("203.0.113.12")).contentType(MediaType.APPLICATION_JSON)

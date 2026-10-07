@@ -101,7 +101,7 @@ export default function DeviceDrawer({ id, you, onClose, onChanged }) {
                         <input
                           className="input input-sm" value={nick} maxLength={40} autoFocus
                           placeholder="e.g. Ravi’s iPhone" aria-label="Name for this device"
-                          onChange={(e) => setNick(e.target.value)}
+                          onFocus={(e) => e.target.select()} onChange={(e) => setNick(e.target.value)}
                         />
                         <button type="submit" className="btn btn-sm btn-primary" disabled={busy}>Save</button>
                         <button type="button" className="btn btn-sm" onClick={() => setNick(null)}>Cancel</button>
@@ -153,7 +153,7 @@ export default function DeviceDrawer({ id, you, onClose, onChanged }) {
                           {[!d.ipGeo.approximate && d.ipGeo.isp, d.ipGeo.timezone].filter(Boolean).join(' · ')}
                         </span>
                       </>
-                    ) : <span className="muted">Looking it up…</span>}
+                    ) : <span className="muted">Not known yet</span>}
                   </dd>
                   <dt>Browser time zone</dt>
                   <dd>{d.timezone || '—'}</dd>

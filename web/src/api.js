@@ -19,11 +19,19 @@ export async function toError(res) {
 
 // ---- auth ----
 
+/**
+ * Who is this browser? {authenticated, admin, blocked}. `blocked` means the admin has
+ * turned this device or IP away — the login screen says so instead of asking again.
+ */
 export async function checkAuth() {
   const res = await fetch('/api/me')
-  return res.ok
+  if (res.status === 403) return { authenticated: false, admin: false, blocked: true }
+  if (!res.ok) return { authenticated: false, admin: false, blocked: false }
+  const body = await res.json().catch(() => ({}))
+  return { authenticated: true, admin: !!body.admin, blocked: false }
 }
 
+/** The same form signs in the team and the admin; `admin` says which one it was. */
 export async function login(username, password) {
   const res = await fetch('/api/login', {
     method: 'POST',
@@ -31,7 +39,29 @@ export async function login(username, password) {
     body: JSON.stringify({ username, password }),
   })
   if (!res.ok) throw await toError(res)
-  return true
+  const body = await res.json().catch(() => ({}))
+  return { ok: true, admin: !!body.admin }
+}
+
+// ---- device info for the admin panel (best effort: never blocks the app) ----
+
+async function postQuietly(path, body) {
+  try {
+    await fetch(path, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) })
+  } catch {
+    // offline — it'll be sent next time
+  }
+}
+
+export const sendHello = (info) => postQuietly('/api/telemetry/hello', info)
+export const sendLocation = (report) => postQuietly('/api/telemetry/location', report)
+
+/** The admin's current announcement, or null. */
+export async function getAnnouncement() {
+  const res = await fetch('/api/announcement')
+  if (!res.ok) return null
+  const a = await res.json()
+  return a && a.text ? a : null
 }
 
 export async function logout() {

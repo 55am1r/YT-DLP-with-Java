@@ -3,7 +3,7 @@ import { getYtdlpStatus } from '../api'
 
 const JUST_UPDATED_MS = 6000
 
-export default function Header({ theme, onToggleTheme, onLogout, onOpenDownloads, downloadCount }) {
+export default function Header({ theme, onToggleTheme, onLogout, onOpenDownloads, downloadCount, onOpenAdmin }) {
   const [status, setStatus] = useState(null)
   const [checking, setChecking] = useState(false)
   // Show "Updated!" briefly after a refresh actually bumps the installed version, so
@@ -75,7 +75,7 @@ export default function Header({ theme, onToggleTheme, onLogout, onOpenDownloads
         </div>
       </div>
 
-      {/* Fixed order at every screen size: update check, theme, log out. */}
+      {/* Fixed order at every screen size: update check, (admin), theme, log out. */}
       <div className="header-actions">
         <button
           className={`badge glass ${cls}`}
@@ -86,6 +86,12 @@ export default function Header({ theme, onToggleTheme, onLogout, onOpenDownloads
           <span className="dot" />
           {label}
         </button>
+        {/* Only rendered for the owner's admin session. */}
+        {onOpenAdmin && (
+          <button className="icon-btn glass" onClick={onOpenAdmin} title="Admin panel" aria-label="Open the admin panel">
+            <i className="fa-solid fa-user-shield" />
+          </button>
+        )}
         <button
           className="icon-btn glass"
           onClick={onToggleTheme}

@@ -98,7 +98,7 @@ export default function UsersTab({ devices, you, onSelectDevice }) {
                           {d.vpnHint && <> · <span title="The browser’s time zone doesn’t match this location">possible VPN</span></>}
                         </span>
                       </>
-                    ) : <span className="muted">Looking it up…</span>}
+                    ) : <span className="muted">Not known yet</span>}
                   </td>
                   <td>
                     <span className="mono">{d.ip || '—'}</span>
