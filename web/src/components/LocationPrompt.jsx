@@ -64,7 +64,8 @@ export default function LocationPrompt() {
       <div className="notice-body">
         <strong>Share your location with the EZ-Tube admin?</strong>
         <span className="muted">
-          It’s optional. Without it the admin only sees an approximate city, worked out from your internet connection.
+          It’s optional and you can stop any time. If you share, your position is updated each time you open
+          EZ-Tube. Without it, the admin only sees an approximate city worked out from your internet connection.
         </span>
         {note && <span className="muted">{note}</span>}
       </div>

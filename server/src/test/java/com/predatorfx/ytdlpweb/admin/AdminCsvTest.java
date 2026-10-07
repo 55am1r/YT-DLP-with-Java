@@ -28,6 +28,8 @@ class AdminCsvTest {
         assertEquals("\"say \"\"hi\"\"\"", AdminCsv.cell("say \"hi\""));
         assertEquals("\"two\nlines\"", AdminCsv.cell("two\nlines"));
         assertEquals("plain", AdminCsv.cell("plain"));
+        // Spreadsheets set to ';' as the separator would split here and run the second half.
+        assertEquals("\"a;=1+1\"", AdminCsv.cell("a;=1+1"));
         assertEquals("", AdminCsv.cell(null));
     }
 

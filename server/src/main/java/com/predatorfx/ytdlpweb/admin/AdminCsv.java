@@ -56,7 +56,8 @@ final class AdminCsv {
         if (!v.isEmpty() && "=+-@\t\r".indexOf(v.charAt(0)) >= 0) {
             v = "'" + v;
         }
-        if (v.contains(",") || v.contains("\"") || v.contains("\n") || v.contains("\r")) {
+        // ';' too: spreadsheets set to semicolon-separated would split the cell there.
+        if (v.contains(",") || v.contains(";") || v.contains("\"") || v.contains("\n") || v.contains("\r")) {
             v = "\"" + v.replace("\"", "\"\"") + "\"";
         }
         return v;
