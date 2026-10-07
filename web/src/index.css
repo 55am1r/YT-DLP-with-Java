@@ -1097,3 +1097,24 @@ body {
 @media (max-width: 750px) {
   .sheet { width: min(70vw, 320px); }
 }
+
+/* ---------- Notices: the admin's announcement and the location card ----------
+   Slim glass strips under the header. Icon tile on the left, words in text colour,
+   actions on the right (wrapping under the words on a phone). */
+.notice { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 14px; margin-bottom: 14px; }
+.notice-icon {
+  flex: 0 0 auto; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+  font-size: 15px; background: rgba(80, 100, 255, 0.16); color: #aeb9ff;
+}
+.notice.warn .notice-icon { background: rgba(245, 166, 35, 0.18); color: var(--warn); }
+.location-card .notice-icon { background: rgba(46, 204, 113, 0.16); color: var(--ok); }
+.notice-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; line-height: 1.45; }
+.notice-actions { flex: 0 0 auto; display: flex; gap: 8px; }
+:root[data-theme='light'] .notice-icon { color: #3346c7; }
+:root[data-theme='light'] .notice.warn .notice-icon { color: #b45309; }
+:root[data-theme='light'] .location-card .notice-icon { color: #15803d; }
+.login-note { margin: 0; font-size: 13px; }
+@media (max-width: 640px) {
+  .notice { flex-wrap: wrap; }
+  .notice-actions { width: 100%; justify-content: flex-end; }
+}

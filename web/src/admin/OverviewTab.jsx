@@ -23,7 +23,7 @@ export default function OverviewTab({ data, selectedId, onSelectDevice, onCancel
         )}
       </div>
 
-      <section className="panel glass">
+      <section className="panel glass map-panel">
         <div className="panel-head">
           <h2>Where the team is</h2>
           <button type="button" className="link-btn" onClick={() => onShowTab('users')}>See them as a list</button>

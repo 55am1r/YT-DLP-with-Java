@@ -15,6 +15,8 @@ const LINE = 1.1 // line height, in em
 const RANK = { precise: 3, ip: 2, lan: 1 }
 const DAY = 86_400_000
 const TIP_ROWS = 6
+/** How close (px) the pointer must come to a marker to pick it. */
+const PICK_RADIUS = 20
 
 const FILTERS = [
   { id: 'online', label: 'Online now', test: (d) => d.online },
@@ -69,7 +71,9 @@ function markers(devices, cols, rows, selectedId) {
 
 export default function WorldMap({ devices, selectedId, onSelect }) {
   const stage = useRef(null)
+  const markerEls = useRef(new Map()) // cell key → its button, to find the one nearest the pointer
   const [width, setWidth] = useState(0)
+  const [pointing, setPointing] = useState(false)
   const [filter, setFilter] = useState('week')
   const [tip, setTip] = useState(null) // { key, x, y, below, pinned }
 
@@ -109,6 +113,42 @@ export default function WorldMap({ devices, selectedId, onSelect }) {
   const { cells, byRow } = markers(placed, cols, rows, selectedId)
   const tipCell = tip ? cells.get(tip.key) : null
 
+  // Markers are a few pixels wide and neighbouring cities sit side by side, so the pointer
+  // picks whichever marker is nearest (within PICK_RADIUS) rather than whatever it lands on.
+  // The buttons themselves stay for keyboard focus and screen readers.
+  function nearest(x, y) {
+    let best = null
+    let bestDist = PICK_RADIUS * PICK_RADIUS
+    markerEls.current.forEach((el, key) => {
+      const b = el.getBoundingClientRect()
+      const d = (b.left + b.width / 2 - x) ** 2 + (b.top + b.height / 2 - y) ** 2
+      if (d < bestDist) {
+        bestDist = d
+        best = { cell: cells.get(key), el }
+      }
+    })
+    return best?.cell ? best : null
+  }
+
+  function onPointerMove(e) {
+    const hit = nearest(e.clientX, e.clientY)
+    setPointing(!!hit)
+    if (tip?.pinned) return
+    if (hit && hit.cell.key !== tip?.key) showTip(hit.cell, hit.el)
+    else if (!hit && tip) setTip(null)
+  }
+
+  function onStageClick(e) {
+    if (e.target.closest('.map-tip')) return
+    const hit = nearest(e.clientX, e.clientY)
+    if (hit) open(hit.cell, hit.el)
+  }
+
+  function open(cell, el) {
+    if (cell.devices.length === 1) onSelect(cell.devices[0].id)
+    else showTip(cell, el, true)
+  }
+
   function showTip(cell, el, pinned = false) {
     const box = stage.current.getBoundingClientRect()
     const m = el.getBoundingClientRect()
@@ -130,9 +170,10 @@ export default function WorldMap({ devices, selectedId, onSelect }) {
       </div>
 
       <div
-        className="map-stage" ref={stage} role="group"
+        className={`map-stage ${pointing ? 'pointing' : ''}`} ref={stage} role="group"
         aria-label={`World map: ${placed.length} ${placed.length === 1 ? 'device' : 'devices'} shown`}
-        onPointerLeave={() => setTip((t) => (t?.pinned ? t : null))}
+        onPointerMove={onPointerMove} onClick={onStageClick}
+        onPointerLeave={() => { setPointing(false); setTip((t) => (t?.pinned ? t : null)) }}
       >
         {cols > 0 && (
           <pre className="map-grid" style={{ fontSize: `${fontSize}px`, lineHeight: LINE }}>
@@ -144,12 +185,12 @@ export default function WorldMap({ devices, selectedId, onSelect }) {
                 parts.push(
                   <button
                     key={m.key} type="button"
+                    ref={(el) => { if (el) markerEls.current.set(m.key, el); else markerEls.current.delete(m.key) }}
                     className={`mk mk-${m.source}${m.online ? ' online' : ''}${m.selected ? ' selected' : ''}`}
                     aria-label={`${m.devices.length} ${m.devices.length === 1 ? 'device' : 'devices'} near ${m.devices[0].place.label}`}
-                    onPointerEnter={(e) => { if (!tip?.pinned) showTip(m, e.currentTarget) }}
                     onFocus={(e) => showTip(m, e.currentTarget)}
                     onBlur={() => setTip((t) => (t?.pinned ? t : null))}
-                    onClick={(e) => (m.devices.length === 1 ? onSelect(m.devices[0].id) : showTip(m, e.currentTarget, true))}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(m, e.currentTarget) } }}
                   >
                     {m.glyph}
                   </button>,
