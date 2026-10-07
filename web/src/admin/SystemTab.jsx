@@ -46,7 +46,7 @@ export default function SystemTab({ data, onChanged }) {
             <dt>Running for</dt>
             <dd>{fmtDuration(s.uptimeMs)}</dd>
             <dt>Downloads</dt>
-            <dd>{s.runningJobs} running · {s.recentFiles} finished in the last 10 min</dd>
+            <dd>{s.runningJobs} running · {s.unsavedFiles} finished but not saved by anyone yet</dd>
             <dt>Server clock</dt>
             <dd>{fmtDateTime(s.serverTime)} <span className="muted">({s.serverZone})</span></dd>
           </dl>

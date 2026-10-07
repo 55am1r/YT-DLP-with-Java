@@ -106,19 +106,45 @@ class ActivityStoreTest {
     }
 
     @Test
-    void rewriteKeepsOnlyGivenRecords() {
+    void rewriteDownloadsKeepsOnlyGivenRecords() {
         ActivityStore store = new ActivityStore(dir);
         store.appendDownload(download("j1", "COMPLETED"));
         store.appendDownload(download("j2", "COMPLETED"));
+
+        store.rewriteDownloads(List.of(download("j2", "COMPLETED")));
+
+        assertEquals(List.of("j2"), ids(new ActivityStore(dir).load().downloads()));
+    }
+
+    @Test
+    void pruneEventsDropsOnlyWhatIsTooOld() {
+        ActivityStore store = new ActivityStore(dir);
         ActivityEvent keep = new ActivityEvent(9_000, ActivityEvent.ANALYZE, "dev-1", "49.37.10.20", null, "u", "t");
         store.appendEvent(new ActivityEvent(1_000, ActivityEvent.LOGIN, "dev-1", "49.37.10.20", null, null, null));
         store.appendEvent(keep);
 
-        store.rewrite(List.of(download("j2", "COMPLETED")), List.of(keep));
+        store.pruneEvents(5_000);
 
-        ActivityStore.Loaded loaded = new ActivityStore(dir).load();
-        assertEquals(List.of("j2"), ids(loaded.downloads()));
-        assertEquals(List.of(keep), loaded.events());
+        assertEquals(List.of(keep), new ActivityStore(dir).load().events());
+    }
+
+    /** A side instance pointed at the live data dir must not overwrite the live server's records. */
+    @Test
+    void secondProcessCannotWriteTheRecords() {
+        ActivityStore live = new ActivityStore(dir);
+        assertTrue(live.claim());
+        ActivityStore other = new ActivityStore(dir);
+        assertFalse(other.claim());
+
+        other.appendDownload(download("j9", "QUEUED"));
+        other.saveDevices(List.of(device("dev-9")));
+
+        assertTrue(live.load().downloads().isEmpty());
+        assertTrue(live.load().devices().isEmpty());
+        live.release();
+        ActivityStore next = new ActivityStore(dir);
+        assertTrue(next.claim(), "free again once the owner lets go");
+        next.release();
     }
 
     @Test

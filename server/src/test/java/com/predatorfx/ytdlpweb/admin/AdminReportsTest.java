@@ -196,6 +196,26 @@ class AdminReportsTest {
         assertFalse(new AdminReports.DownloadFilter(null, null, null, null, 7).test(b, NOW));
     }
 
+    /** A restart deletes every finished file still on the server — unsaved ones are lost work. */
+    @Test
+    void unsavedFinishedFilesMakeARestartUnsafe() {
+        DownloadRecord unsaved = dl("a", "dev1", NOW, "COMPLETED", 1L);
+        DownloadRecord saved = dl("b", "dev1", NOW, "COMPLETED", 1L);
+        saved.getSavedBy().add("dev1");
+
+        AdminReports.RestartCheck risky = AdminReports.restartCheck(
+                List.of(job("a", JobStatus.COMPLETED), job("b", JobStatus.COMPLETED)), Map.of("a", unsaved, "b", saved));
+        assertFalse(risky.safe());
+        assertEquals(1, risky.unsaved());
+        assertTrue(risky.note().contains("1 finished file"), risky.note());
+
+        assertTrue(AdminReports.restartCheck(List.of(job("b", JobStatus.COMPLETED)), Map.of("b", saved)).safe());
+
+        AdminReports.RestartCheck busy = AdminReports.restartCheck(List.of(job("c", JobStatus.DOWNLOADING)), Map.of());
+        assertFalse(busy.safe());
+        assertEquals(1, busy.running());
+    }
+
     @Test
     void namesPreferTheAdminsNickname() {
         DeviceRecord d = device("d", NOW, null);
