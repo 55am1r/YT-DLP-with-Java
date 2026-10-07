@@ -216,7 +216,41 @@ finishes in minutes rather than hours and the CPU stays free for other jobs.
   including square album art.
 - **Light and dark themes**, each with its own tuned control surfaces, plus restrained
   entrance and hover motion that respects `prefers-reduced-motion`.
-- **Session login.** Cookie-based auth, credentials kept out of version control.
+- **Session login.** Cookie-based auth, credentials kept out of version control. The
+  owner's admin login uses the same screen — see below.
+
+### Admin panel
+
+Owner-only. The admin's own username and password, typed into the normal login screen,
+open an admin panel instead of the downloader (each has a button to switch to the other).
+The credentials are stored only as a salted PBKDF2 hash (`app.admin.credential`), and both
+parts are case-sensitive.
+
+- **Where everyone is** — a dotted ASCII world map with a marker for every device: its
+  precise location if the person chose to share it, otherwise the approximate city of its
+  IP address (office-LAN users appear at the Mac's own location). Online devices pulse.
+- **Users** — every browser that has signed in: device, last seen, location, ISP, route
+  (internet / office LAN / this Mac), downloads, data and visits. A drawer shows its IP
+  history, location details, downloads and activity; devices can be named or blocked.
+- **Downloads** — the complete log, searchable and filterable by device, result, type and
+  period, with a CSV export.
+- **Insights** — downloads per day, busiest hours, most-downloaded videos, audio vs video,
+  quality and format mix, top places, most active devices.
+- **Security** — wrong logins and where they came from. Ten wrong attempts from one IP in
+  15 minutes lock it out for 10 minutes. IPs and devices can be blocked and unblocked.
+- **System** — whether a restart is safe right now, the current public and LAN links,
+  yt-dlp version, free disk space, and an announcement banner for the whole team.
+
+**Location consent.** Teammates see an optional card — *Share your location with the
+EZ-Tube admin?* The browser's own prompt appears only after they press **Share location**;
+**No thanks** is respected for 30 days, and turning location off later deletes the stored
+position. Browsers allow location only over HTTPS, so it is offered on the public (tunnel)
+link, not the plain-http LAN address. Approximate locations come from ipwho.is (falling
+back to ipinfo.io), cached for 14 days; `app.geo.enabled=false` stops all lookups.
+
+**Records** live in `app.admin.data-dir` (default `~/.ytdlp-web/admin-data`, owner-only) —
+not the work directory, which is wiped on every restart — and are kept for
+`app.admin.retention-days` (365).
 
 ---
 
@@ -301,6 +335,11 @@ and materially better throughput.
 | `ytdlp.max-concurrent-jobs` | `3` | Simultaneous heavy jobs; the rest queue |
 | `ytdlp.update-check-interval-minutes` | `180` | How often to re-check yt-dlp |
 | `ytdlp.file-ttl-minutes` | `120` | How long a finished file survives |
+| `app.admin.credential` | empty (admin off) | Admin login as a salted hash; the one-line generator is in `application.properties.example` |
+| `app.admin.data-dir` | `~/.ytdlp-web/admin-data` | Where admin records are kept (survives restarts) |
+| `app.admin.retention-days` | `365` | Records older than this are deleted nightly |
+| `app.admin.tunnel-log` | `/tmp/ytdlp-tunnel.log` | Where the System tab reads the current public link |
+| `app.geo.enabled` | `true` | Look up approximate locations of IP addresses |
 
 ---
 
@@ -328,9 +367,11 @@ cd web && npm run dev
 │       ├── service/                    # YtDlpService, CodecCatalog, JobService,
 │       │                               #   YtDlpUpdateService
 │       ├── web/                        # REST controllers, auth filter
+│       ├── admin/                      # admin panel: admin login, activity records,
+│       │                               #   geo-IP, admin API
 │       └── model/                      # Job, DownloadRequest, AnalyzeResult, …
 └── web/                                # React frontend
-    └── src/{App.jsx, api.js, components/}
+    └── src/{App.jsx, api.js, components/, admin/}
 ```
 
 ### HTTP API
@@ -345,6 +386,12 @@ cd web && npm run dev
 | `GET` | `/api/jobs/{id}/file` | Download the finished file |
 | `POST` | `/api/jobs/{id}/pause` · `/resume` · `/cancel` | Job control |
 | `GET` | `/api/ytdlp/status` | Version / freshness of yt-dlp |
+| `POST` | `/api/login` | Sign in (team or admin); answers `{ok, admin}` |
+| `GET` | `/api/me` | Session check: `{authenticated, admin}` |
+| `POST` | `/api/telemetry/hello` · `/location` | Device details and the location-consent answer |
+| `GET` | `/api/announcement` | The admin's banner, if any |
+| `GET` | `/api/admin/dashboard` · `/insights` · `/downloads` · `/downloads.csv` · `/devices/{id}` | Admin panel data (admin session only) |
+| `POST` | `/api/admin/devices/{id}` · `/ips/block` · `/ips/unlock` · `/jobs/{id}/cancel` · `/announcement` | Admin actions, each written to the activity log |
 
 ---
 
