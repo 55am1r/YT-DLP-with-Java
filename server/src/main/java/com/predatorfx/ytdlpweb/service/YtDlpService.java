@@ -348,6 +348,19 @@ public class YtDlpService {
     /** Run the actual download, updating {@code job} and calling {@code onUpdate} on progress. */
     public void download(Job job, Consumer<Job> onUpdate) throws IOException, InterruptedException {
         DownloadRequest req = job.getRequest();
+
+        // A clip can't be cut from a stream YouTube is still processing — the section
+        // download fetches almost nothing and the merge dies with an opaque ffmpeg error.
+        // Catch it before downloading anything and tell the user why (see clippingUnavailable).
+        if (req.hasClipRange()) {
+            job.setStatus(JobStatus.DOWNLOADING);
+            job.setPhase("Checking clip…");
+            onUpdate.accept(job);
+            if (clippingUnavailable(liveStatus(req.url()))) {
+                throw new IOException(CLIP_LIVE_MESSAGE);
+            }
+        }
+
         Path jobDir = workDir().resolve(job.getId());
         Files.createDirectories(jobDir);
 
@@ -736,6 +749,54 @@ public class YtDlpService {
     /** yt-dlp names H.264 "avc1.…". Null is the audio stream or an unknown, never a reason to convert. */
     static boolean needsH264Conversion(String vcodec) {
         return vcodec != null && !vcodec.startsWith("avc1");
+    }
+
+    /** Shown when a clip is asked for on a video YouTube hasn't finished processing. */
+    static final String CLIP_LIVE_MESSAGE =
+            "This is a live stream YouTube is still processing, so a trimmed clip can't be made yet. "
+            + "Download the full video, or try the clip again in a few hours once YouTube has turned "
+            + "it into a normal video.";
+
+    /**
+     * The live_status values a clip cannot be cut from. A trim uses --download-sections,
+     * which seeks inside the video; YouTube exposes no seekable data while a stream is
+     * still live ("is_live") or has only just ended and is still being processed into a
+     * VOD ("post_live"). The section download then fetches almost nothing and the merge
+     * fails with "Error opening output files: Invalid argument" / "ffmpeg exited with
+     * code 183". The full download of the same video is unaffected. "not_live" (which a
+     * finished former-live video reports once processed) and an unknown/absent status are
+     * normal videos that clip fine.
+     */
+    static boolean clippingUnavailable(String liveStatus) {
+        if (liveStatus == null) {
+            return false;
+        }
+        String s = liveStatus.trim().toLowerCase();
+        return s.equals("is_live") || s.equals("post_live");
+    }
+
+    /** yt-dlp's live_status for one video, or null when it can't be read. */
+    private String liveStatus(String url) {
+        try {
+            Processes.Result r = Processes.run(
+                    List.of(bin, "--no-warnings", "--ignore-config", "--no-playlist",
+                            "--skip-download", "--print", "%(live_status)s", url),
+                    Duration.ofSeconds(60));
+            if (r.code() != 0) {
+                return null; // couldn't tell — don't block the download over it
+            }
+            String s = r.stdout().strip();
+            int nl = s.indexOf('\n');
+            if (nl >= 0) {
+                s = s.substring(0, nl).strip();
+            }
+            return s.isEmpty() || "NA".equals(s) ? null : s;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
     }
 
     private void setPhase(Job job, JobStatus status, String phase, Consumer<Job> onUpdate) {
