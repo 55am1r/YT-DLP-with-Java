@@ -153,7 +153,7 @@ export default function Globe({ devices, selectedId, onSelect }) {
 
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 100)
-    const [ix, iy, iz] = latLonToVec3(18, 79, 2.9) // open looking at India — where the team is
+    const [ix, iy, iz] = latLonToVec3(18, 79, 2.5) // open looking at India — where the team is, filling the frame
     camera.position.set(ix, iy, iz)
 
     const colors = readColors(host)

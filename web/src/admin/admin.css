@@ -213,29 +213,51 @@ td .chip-row { margin-top: 6px; display: flex; }
 .empty i { font-size: 22px; color: var(--muted); margin-bottom: 4px; }
 
 /* ---------- The 3-D dotted globe ---------- */
-/* Shown ambiently: the section sheds the glass card so the globe floats straight on the
-   dashboard — no box, border, surface fill or 1px edge to shimmer as the canvas repaints every
-   frame. Its glow just fades out to nothing. The .admin .panel layer promotion is undone here
-   (transform:none): a card that re-rasters every animation frame has no still highlight to keep
-   on its own layer, and promoting it only cost paint. */
+/* Full-bleed and ambient: the globe canvas fills the whole panel — behind the title, the filter
+   pills and the legend, which are all overlaid on top. A vignette in the page colour melts the
+   globe into the dashboard at the edges and darkens the strips behind the words, so the white
+   text stays readable over the dots. The section carries no card, so there is no edge to shimmer
+   as the canvas repaints every frame (the .admin .panel layer promotion is undone here too). */
 .admin .map-panel {
   position: relative; z-index: 1;
+  height: min(82vh, 820px); min-height: 480px;
+  margin-bottom: 22px; padding: 0; overflow: hidden; border-radius: 18px;
   background: none; border: none; box-shadow: none;
-  -webkit-backdrop-filter: none; backdrop-filter: none;
-  padding: 2px 2px 0; overflow: visible; transform: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none; transform: none;
 }
-.map-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-.globe { position: relative; }
+/* The overlaid chrome — title top, pills under it, legend pinned to the bottom. Only the real
+   controls catch the pointer; everywhere else the drag/zoom reaches the globe underneath. */
+.map-panel .panel-head { position: relative; z-index: 3; padding: 16px 20px 0; margin: 0; pointer-events: none; }
+.map-panel .panel-head .link-btn { pointer-events: auto; }
+.globe { position: static; }
+.map-panel .map-filters {
+  position: relative; z-index: 3; display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 12px 20px 0; margin: 0; pointer-events: none;
+}
+.map-panel .map-filters .pill { pointer-events: auto; }
 .globe-stage {
-  position: relative; height: min(66vh, 640px); min-height: 340px;
+  position: absolute; inset: 0; z-index: 0;
   cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none;
-  background: radial-gradient(circle at 50% 46%,
-    color-mix(in srgb, var(--accent) 12%, transparent) 0%,
-    color-mix(in srgb, var(--accent) 4%, transparent) 32%,
-    transparent 60%);
+  background: radial-gradient(circle at 50% 48%,
+    color-mix(in srgb, var(--accent) 13%, transparent) 0%,
+    color-mix(in srgb, var(--accent) 4%, transparent) 34%,
+    transparent 62%);
 }
 .globe-stage:active { cursor: grabbing; }
 .globe-stage canvas { display: block; }
+.globe-stage::after {
+  content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background:
+    linear-gradient(to bottom,
+      color-mix(in srgb, var(--bg) 82%, transparent) 0%,
+      color-mix(in srgb, var(--bg) 28%, transparent) 13%,
+      transparent 27%, transparent 73%,
+      color-mix(in srgb, var(--bg) 32%, transparent) 87%,
+      color-mix(in srgb, var(--bg) 82%, transparent) 100%),
+    radial-gradient(135% 100% at 50% 50%, transparent 44%,
+      color-mix(in srgb, var(--bg) 52%, transparent) 78%,
+      color-mix(in srgb, var(--bg) 88%, transparent) 100%);
+}
 /* Follows the pointer (JS sets left/top); sits just to the side so it never hides the pin. */
 .globe-tip {
   position: absolute; z-index: 5; width: 232px; transform: translate(14px, -50%);
@@ -248,7 +270,11 @@ td .chip-row { margin-top: 6px; display: flex; }
   position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; text-align: center;
   font-size: 13.5px; color: var(--muted); pointer-events: none;
 }
-.map-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; margin-top: 12px; font-size: 12.5px; }
+.map-panel .map-legend {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; pointer-events: none;
+  display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center;
+  padding: 0 20px 14px; margin: 0; font-size: 12.5px;
+}
 .globe-key {
   display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px;
   background: var(--accent); vertical-align: middle;
