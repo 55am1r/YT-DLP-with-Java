@@ -2,7 +2,7 @@ import { useState } from 'react'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { fmtSpeed } from '../utils'
 import { Chip, DeviceLink, DownloadRow, Empty, Kpi, StatusChip } from './AdminBits'
-import WorldMap from './WorldMap'
+import Globe from './Globe'
 import { bytes, compact, EVENT, timeAgo } from './format'
 
 export default function OverviewTab({ data, selectedId, onSelectDevice, onCancelJob, onShowTab }) {
@@ -28,7 +28,7 @@ export default function OverviewTab({ data, selectedId, onSelectDevice, onCancel
           <h2>Where the team is</h2>
           <button type="button" className="link-btn" onClick={() => onShowTab('users')}>See them as a list</button>
         </div>
-        <WorldMap devices={data.devices} selectedId={selectedId} onSelect={onSelectDevice} />
+        <Globe devices={data.devices} selectedId={selectedId} onSelect={onSelectDevice} />
       </section>
 
       <div className="admin-cols">
