@@ -60,6 +60,15 @@ export function landGrid(cols, rows, latTop = LAT_TOP, latBottom = LAT_BOTTOM) {
   return grid
 }
 
+/** Is this coordinate on land? Reads the 0.5° mask directly (720×360, 90°N down). */
+export function isLand(lat, lon) {
+  const b = decode()
+  const { w, h } = MASK
+  const x = Math.min(w - 1, Math.max(0, Math.floor(((lon + 180) / 360) * w)))
+  const y = Math.min(h - 1, Math.max(0, Math.floor(((90 - lat) / 180) * h)))
+  return b[y * w + x] === 1
+}
+
 /** The grid cell a coordinate falls in; points beyond the cut-off latitudes sit on the edge row. */
 export function cellOf(lat, lon, cols, rows, latTop = LAT_TOP, latBottom = LAT_BOTTOM) {
   const r = Math.floor(((latTop - lat) / (latTop - latBottom)) * rows)

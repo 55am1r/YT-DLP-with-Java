@@ -10,7 +10,6 @@ import ScrollFab from './components/ScrollFab'
 import Login from './components/Login'
 import AnnouncementBanner from './components/AnnouncementBanner'
 import LocationPrompt from './components/LocationPrompt'
-import LocationStatus from './components/LocationStatus'
 import { analyze, startJob, checkAuth, clearJobs, getCodecs, retryJob, fileAvailable, logout as apiLogout, sendHello } from './api'
 import { useAutoSave } from './autosave'
 import { helloInfo, locationPermission } from './telemetry'
@@ -638,7 +637,6 @@ export default function App() {
 
       <footer className="foot muted">
         by PredatorFX · for ChaitusMedia Team use
-        {!isAdmin && <LocationStatus />}
       </footer>
     </div>
   )
