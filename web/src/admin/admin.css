@@ -56,11 +56,11 @@
 }
 .admin-tab:hover { color: var(--text); background: var(--glass-bg-hover); }
 .admin-tab.active { color: var(--text); background-image: var(--sheen), var(--control-bg); box-shadow: var(--glass-depth); }
-.tab-count {
+.admin .tab-count {
   min-width: 18px; padding: 1px 6px; border-radius: 999px; font-size: 11px; font-weight: 700; text-align: center;
   background: var(--tone-warning); color: #1d1600;
 }
-.tab-count.info { background: var(--viz-1); color: #fff; }
+.admin .tab-count.info { background: var(--viz-1); color: #fff; }
 
 /* ---------- Stat tiles ---------- */
 .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
@@ -92,14 +92,17 @@
 td .chip-row { margin-top: 6px; display: flex; }
 
 /* ---------- Links and buttons ---------- */
-.link-btn {
+/* Scoped to .admin: these utility classes also exist in the downloader's index.css, and the
+   admin chunk stays in the document after you leave the panel — an unscoped rule here would
+   restyle the downloader's own .link-btn / .copy-link / .tab-count the next time it renders. */
+.admin .link-btn {
   border: 0; background: none; padding: 0; font: inherit; color: var(--text); cursor: pointer; text-align: left;
   text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px;
 }
-.link-btn:hover:not(:disabled) { text-decoration-color: currentColor; }
-.link-btn:disabled { opacity: 0.5; cursor: default; }
-.link-btn.danger { color: var(--danger-ink); }
-.link-btn.small { font-size: 12px; font-weight: 500; }
+.admin .link-btn:hover:not(:disabled) { text-decoration-color: currentColor; }
+.admin .link-btn:disabled { opacity: 0.5; cursor: default; }
+.admin .link-btn.danger { color: var(--danger-ink); }
+.admin .link-btn.small { font-size: 12px; font-weight: 500; }
 .admin a { color: inherit; text-underline-offset: 3px; }
 .admin .btn-danger { color: var(--danger-ink); border-color: rgba(225, 29, 42, 0.45); }
 
@@ -330,7 +333,7 @@ td .chip-row { margin-top: 6px; display: flex; }
 .rank { text-align: right; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* ---------- Device drawer ---------- */
-.sheet.drawer { width: min(96vw, 580px); }
+.admin .sheet.drawer { width: min(96vw, 580px); }
 .drawer-body { flex: 1; overflow-y: auto; padding: 4px 6px 24px; display: flex; flex-direction: column; gap: 12px; }
 /* A scrolling child (the networks table) may otherwise shrink to nothing in this column. */
 .drawer-body > * { flex-shrink: 0; }
@@ -354,8 +357,8 @@ td .chip-row { margin-top: 6px; display: flex; }
 .restart p { margin: 0; }
 .restart.is-safe { box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-edge), inset 3px 0 0 var(--tone-good); }
 .restart.is-busy { box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-edge), inset 3px 0 0 var(--tone-warning); }
-.copy-link { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
-.copy-link a { overflow-wrap: anywhere; }
+.admin .copy-link { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.admin .copy-link a { overflow-wrap: anywhere; }
 
 @media (max-width: 640px) {
   .admin .panel { padding: 14px; }
