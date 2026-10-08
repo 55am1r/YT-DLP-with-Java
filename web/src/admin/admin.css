@@ -213,17 +213,26 @@ td .chip-row { margin-top: 6px; display: flex; }
 .empty i { font-size: 22px; color: var(--muted); margin-bottom: 4px; }
 
 /* ---------- The 3-D dotted globe ---------- */
-/* The globe card sits above the cards after it, so the tooltip can hang over them. */
-.map-panel { position: relative; z-index: 3; }
-.map-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+/* Shown ambiently: the section sheds the glass card so the globe floats straight on the
+   dashboard — no box, border, surface fill or 1px edge to shimmer as the canvas repaints every
+   frame. Its glow just fades out to nothing. The .admin .panel layer promotion is undone here
+   (transform:none): a card that re-rasters every animation frame has no still highlight to keep
+   on its own layer, and promoting it only cost paint. */
+.admin .map-panel {
+  position: relative; z-index: 1;
+  background: none; border: none; box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  padding: 2px 2px 0; overflow: visible; transform: none;
+}
+.map-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
 .globe { position: relative; }
 .globe-stage {
-  position: relative; height: min(58vh, 540px); min-height: 320px;
-  border-radius: 14px; overflow: hidden; cursor: grab;
-  touch-action: none; user-select: none; -webkit-user-select: none;
-  background:
-    radial-gradient(130% 110% at 50% 16%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 62%),
-    var(--surface);
+  position: relative; height: min(66vh, 640px); min-height: 340px;
+  cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none;
+  background: radial-gradient(circle at 50% 46%,
+    color-mix(in srgb, var(--accent) 12%, transparent) 0%,
+    color-mix(in srgb, var(--accent) 4%, transparent) 32%,
+    transparent 60%);
 }
 .globe-stage:active { cursor: grabbing; }
 .globe-stage canvas { display: block; }
