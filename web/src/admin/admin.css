@@ -70,6 +70,13 @@
 .kpi-sub { font-size: 12px; color: var(--muted); }
 .kpi-warning { box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-edge), inset 3px 0 0 var(--tone-warning); }
 
+/* The dashboard's glass cards scroll over a blurred backdrop. Give each its own compositing
+   layer so the 1px top highlight stays put instead of shimmering while Chromium re-rasters the
+   rounded backdrop edge on every scroll frame. ConfirmDialog renders through a portal into
+   <body>, so promoting these cards never becomes the containing block for its fixed overlay. */
+.admin .panel,
+.admin .kpi { transform: translateZ(0); }
+
 /* ---------- Chips: icon carries the tone, words stay in text colour ---------- */
 .chip {
   display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px;
