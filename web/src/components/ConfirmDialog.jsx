@@ -1,9 +1,14 @@
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 
 /**
  * Modal shown when a requested download already exists on the server, so the team
  * doesn't fetch and store the same 4K file twice. Escape and the backdrop both mean
  * "keep the existing one" — the safe, no-extra-load answer.
+ *
+ * Rendered through a portal into <body> so the position:fixed backdrop always covers the
+ * whole viewport — even when it's opened from inside a panel that sits on its own
+ * compositing layer (which would otherwise become the fixed element's containing block).
  */
 export default function ConfirmDialog({
   title, message, detail, confirmLabel, cancelLabel,
@@ -21,7 +26,7 @@ export default function ConfirmDialog({
     return () => window.removeEventListener('keydown', onKey)
   }, [onCancel])
 
-  return (
+  return createPortal(
     <div className="modal-backdrop" onClick={onCancel}>
       <div className="modal glass" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <div className="modal-icon"><i className={`fa-solid ${headerIcon}`} /></div>
@@ -37,6 +42,7 @@ export default function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
