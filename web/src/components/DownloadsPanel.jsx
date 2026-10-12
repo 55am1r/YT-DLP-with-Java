@@ -21,7 +21,7 @@ function AutoSaveSwitch({ on, busy, noFolder, locked, onToggle }) {
         ? 'Saving right now — you can change this once it finishes.'
         : on
           ? `Auto-save is on for ${locked ? 'every link' : 'this link'}. Each finished download is written straight into its folder.${noFolder ? ' No folder is set, so files are handed to your browser instead.' : ''}`
-          : `Auto-save is off for ${locked ? 'every link' : 'this link'}. Turning it on asks for a folder, so nothing prompts you later.`}
+          : `Auto-save is off for ${locked ? 'every link' : 'this link'}. ${noFolder ? 'Turning it on asks for a folder once; after that it is remembered.' : 'Turning it on saves into the folder you chose before.'}`}
     >
       <span className="switch-track"><span className="switch-knob" /></span>
       <span>Auto-save</span>

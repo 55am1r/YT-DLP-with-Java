@@ -51,8 +51,8 @@ const loadFolders = async () => {
 
 const OFF = { on: false, folder: null }
 const TEMPLATE_KEY = 'lock:template'
-// A tab remembers its switch and folder together; a handle survives inside an object in IndexedDB.
-const storeTab = (pageId, t) => idb('readwrite', (s) => (t && t.on ? s.put({ on: true, handle: t.folder?.handle || null }, 'tab:' + pageId) : s.delete('tab:' + pageId))).catch(() => {})
+// A tab remembers its switch and folder together — the folder even while switched off.
+const storeTab = (pageId, t) => idb('readwrite', (s) => (t && (t.on || t.folder) ? s.put({ on: !!t.on, handle: t.folder?.handle || null }, 'tab:' + pageId) : s.delete('tab:' + pageId))).catch(() => {})
 const storeTemplateRaw = (t) => idb('readwrite', (s) => (t ? s.put({ on: !!t.on, handle: t.folder?.handle || null }, TEMPLATE_KEY) : s.delete(TEMPLATE_KEY))).catch(() => {})
 
 const granted = async (h) => (await h.queryPermission({ mode: 'readwrite' })) === 'granted'
@@ -384,14 +384,20 @@ export function useAutoSave({ pages, enabled, markSaved }) {
   }, [auto, folderFor])
 
   /**
-   * A link tab's switch — every tab's while the lock is closed. ON always asks for the folder, the
-   * only way a page can write a file without a dialog. Dismissing the picker still leaves it on,
-   * falling back to the browser.
+   * A link tab's switch — every tab's while the lock is closed. ON asks for a folder only the first
+   * time: the folder is kept through OFF, and ON again reuses it (re-asking only for permission if the
+   * browser dropped it). A folder is the only way a page can write a file without a dialog.
+   * Dismissing the picker still leaves it on, falling back to the browser.
    */
   const setOn = useCallback(async (pageId, value) => {
     const ids = lockedRef.current ? pagesRef.current.map((p) => p.id) : [pageId]
-    let t = OFF
-    if (value) {
+    const kept = tabsRef.current[pageId]?.folder || null // chosen once, kept through off and on
+    let t = { on: false, folder: kept }
+    if (value && kept) {
+      // No picker: the folder is remembered. Only the permission may need asking again.
+      const ok = await granted(kept.handle).catch(() => false) || await ask(kept.handle).catch(() => false)
+      t = { on: true, folder: { ...kept, granted: ok } }
+    } else if (value) {
       putTabs(ids, { on: true, folder: null }, false) // on now, so files that finish meanwhile wait for the folder
       const handle = canPickFolder ? await choose() : null
       t = { on: true, folder: handle && { handle, name: handle.name, granted: true } }
@@ -399,8 +405,8 @@ export function useAutoSave({ pages, enabled, markSaved }) {
     putTabs(ids, t)
     if (lockedRef.current) storeTemplate(t)
     releaseHeld()
-    // Choosing a folder also brings in finished files that so far only went to the browser.
-    if (t.folder) {
+    // Choosing (or re-allowing) a folder also brings in finished files that so far only went to the browser.
+    if (t.on && t.folder?.granted) {
       for (const job of jobsRef.current) {
         if (job.status === 'COMPLETED' && sentTo.current.get(job.id) === 'browser' && ids.includes(pageOf.current.get(job.id))) {
           seen.current.add(job.id)
