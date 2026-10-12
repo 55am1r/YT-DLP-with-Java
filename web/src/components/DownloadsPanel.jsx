@@ -6,7 +6,7 @@ import { GRACE_SECONDS } from '../autosave'
  * saves itself — into the folder chosen on its own card, or the link's folder, or the browser's
  * Downloads folder after a short countdown. Off: nothing in the link saves by itself.
  */
-function AutoSaveSwitch({ on, busy, noFolder, onToggle }) {
+function AutoSaveSwitch({ on, busy, noFolder, locked, onToggle }) {
   return (
     <button
       type="button"
@@ -20,8 +20,8 @@ function AutoSaveSwitch({ on, busy, noFolder, onToggle }) {
       title={busy
         ? 'Saving right now — you can change this once it finishes.'
         : on
-          ? `Auto-save is on for this link. Each finished download is written straight into its folder.${noFolder ? ' No folder is set, so files are handed to your browser instead.' : ''}`
-          : 'Auto-save is off for this link. Turning it on asks for a folder, so nothing prompts you later.'}
+          ? `Auto-save is on for ${locked ? 'every link' : 'this link'}. Each finished download is written straight into its folder.${noFolder ? ' No folder is set, so files are handed to your browser instead.' : ''}`
+          : `Auto-save is off for ${locked ? 'every link' : 'this link'}. Turning it on asks for a folder, so nothing prompts you later.`}
     >
       <span className="switch-track"><span className="switch-knob" /></span>
       <span>Auto-save</span>
@@ -50,17 +50,18 @@ export default function DownloadsPanel({ pageId, jobs, onClear, onExpired, onRet
               on={t.on}
               busy={busy}
               noFolder={!t.folder}
+              locked={locked}
               onToggle={() => autosave.setOn(pageId, !t.on)}
             />
-            {/* Locked, new links start with this link's Auto-save setting and folder. */}
+            {/* Locked, every link — open or new — shares this Auto-save setting and folder. */}
             <button
               type="button"
               className={`lock-btn${locked ? ' on' : ''}`}
               aria-pressed={locked}
-              aria-label={locked ? 'Unlock Auto-save for new links' : 'Lock Auto-save for new links'}
+              aria-label={locked ? 'Unlock Auto-save (every link follows this one)' : 'Lock Auto-save for every link'}
               title={locked
-                ? 'Locked: new links start with this Auto-save setting and folder. Click to unlock.'
-                : 'Unlocked: each new link starts with Auto-save off. Click to carry this setting to new links.'}
+                ? 'Locked: every link uses this Auto-save setting and folder, new ones too. Click to unlock.'
+                : 'Unlocked: each link has its own Auto-save, and new links start with it off. Click to use this setting for every link.'}
               onClick={() => autosave.setLocked(pageId, !autosave.locked)}
             >
               <i className={`fa-solid ${locked ? 'fa-lock' : 'fa-lock-open'}`} />

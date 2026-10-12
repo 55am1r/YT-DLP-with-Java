@@ -167,7 +167,7 @@ function downloadToBrowser(job) {
  * Saves finished downloads without being asked. Auto-save is switched on per link tab, and a
  * download can still have its own folder on its card:
  *  - Each link tab has a switch and a folder. Switching ON always asks for that tab's folder;
- *    switching OFF resets it. The lock makes new link tabs start with the locked tab's setting.
+ *    switching OFF resets it. The lock keeps every link tab — open or new — on one setting; unlocked, each tab is its own and new ones start off.
  *  - A download's own card folder wins, else its link tab's folder.
  *  - With a folder, the file goes there the moment it is ready. Without one, a GRACE_SECONDS
  *    countdown hands it to the browser's Downloads folder.
@@ -223,6 +223,11 @@ export function useAutoSave({ pages, enabled, markSaved }) {
     storeTab(pageId, null)
   }, [])
 
+  /** Give these link tabs one setting. Each keeps its own copy, filed under its own key. */
+  const putTabs = useCallback((ids, t, persist = true) => {
+    for (const id of ids) putTab(id, { on: t.on, folder: t.folder && { ...t.folder, key: 'tab:' + id } }, persist)
+  }, [putTab])
+
   const storeTemplate = useCallback((t) => { template.current = t; storeTemplateRaw(t) }, [])
 
   const applyFolder = useCallback((jobId, f) => {
@@ -239,9 +244,9 @@ export function useAutoSave({ pages, enabled, markSaved }) {
   /** Record whether the browser still lets us write to this folder — wherever it lives now. */
   const regrant = useCallback((f, ok) => {
     if (f.key.startsWith('tab:')) {
-      const pageId = f.key.slice(4)
-      const t = tabsRef.current[pageId]
-      if (t?.folder?.handle === f.handle) putTab(pageId, { ...t, folder: { ...t.folder, granted: ok } })
+      for (const [pageId, t] of Object.entries(tabsRef.current)) {
+        if (t.folder?.handle === f.handle) putTab(pageId, { ...t, folder: { ...t.folder, granted: ok } })
+      }
     } else {
       const jobId = f.key.slice('folder:'.length)
       const cur = foldersRef.current[jobId]
@@ -375,28 +380,33 @@ export function useAutoSave({ pages, enabled, markSaved }) {
   }, [auto, folderFor])
 
   /**
-   * A link tab's switch. ON always asks for that tab's folder — the only way a page can write a
-   * file without a dialog. Dismissing the picker still leaves it on, falling back to the browser.
+   * A link tab's switch — every tab's while the lock is closed. ON always asks for the folder, the
+   * only way a page can write a file without a dialog. Dismissing the picker still leaves it on,
+   * falling back to the browser.
    */
   const setOn = useCallback(async (pageId, value) => {
+    const ids = lockedRef.current ? pagesRef.current.map((p) => p.id) : [pageId]
     let t = OFF
     if (value) {
-      putTab(pageId, { on: true, folder: null }, false)
+      putTabs(ids, { on: true, folder: null }, false) // on now, so files that finish meanwhile wait for the folder
       const handle = canPickFolder ? await choose() : null
-      t = { on: true, folder: handle && { handle, name: handle.name, granted: true, key: 'tab:' + pageId } }
+      t = { on: true, folder: handle && { handle, name: handle.name, granted: true } }
     }
-    putTab(pageId, t)
+    putTabs(ids, t)
     if (lockedRef.current) storeTemplate(t)
     releaseHeld()
-  }, [choose, putTab, releaseHeld, storeTemplate])
+  }, [choose, putTabs, releaseHeld, storeTemplate])
 
-  /** The lock beside the switch: locked, new link tabs start with this tab's switch and folder. */
+  /** The lock beside the switch: closed, every link tab — open or new — follows this tab's setting. */
   const setLocked = useCallback((pageId, value) => {
     lockedRef.current = value
     setLockedState(value)
     try { localStorage.setItem(LOCK_KEY, value ? 'on' : 'off') } catch { /* private window: just not remembered */ }
-    storeTemplate(value ? tabsRef.current[pageId] || OFF : null)
-  }, [storeTemplate])
+    if (!value) return storeTemplate(null) // every tab keeps what it has; new ones start off
+    const t = tabsRef.current[pageId] || OFF
+    putTabs(pagesRef.current.map((p) => p.id), t)
+    storeTemplate(t)
+  }, [putTabs, storeTemplate])
 
   /** Choose the folder for this one download's card. A link tab's folder is set by its switch. */
   const pick = useCallback(async (jobId) => {
@@ -462,7 +472,7 @@ export function useAutoSave({ pages, enabled, markSaved }) {
     return () => { live = false }
   }, [applyFolder, putTab])
 
-  // A new link tab copies the locked setting; a closed one takes its setting with it.
+  // A new link tab follows the lock; a closed one takes its setting with it.
   const pageIds = pages.map((p) => p.id).join(' ')
   useEffect(() => {
     const ids = new Set(pageIds ? pageIds.split(' ') : [])
@@ -470,13 +480,13 @@ export function useAutoSave({ pages, enabled, markSaved }) {
       const t = template.current
       for (const id of ids) {
         if (!knownPages.current.has(id) && lockedRef.current && t) {
-          putTab(id, { on: t.on, folder: t.folder && { ...t.folder, key: 'tab:' + id } })
+          putTabs([id], t)
         }
       }
       for (const id of knownPages.current) if (!ids.has(id)) dropTab(id)
     }
     knownPages.current = ids
-  }, [pageIds, putTab, dropTab])
+  }, [pageIds, putTabs, dropTab])
 
   // A download that is gone (cleared, its tab closed) takes its folder choice with it.
   useEffect(() => {
