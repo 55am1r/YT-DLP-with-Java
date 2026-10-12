@@ -205,8 +205,8 @@ export default function JobCard({ job, onExpired, onRetry, autosave }) {
   const wantsFolder = autoOn && autosave.canPick && !bad
     && (ACTIVE.has(job.status) || (done && !job.saved && (!saveState || ['wait', 'hold'].includes(saveState.phase))))
 
-  // Pre-fetched only so the Save file button is instant. With a folder set that button is
-  // off and the saver fetches the file itself, so doing it here too would pull it twice.
+  // Pre-fetched only so the Save file button is instant. With a folder set the saver fetches the
+  // file itself, so a prefetch here too would pull it twice; Save file then streams it directly.
   useEffect(() => {
     if (!done || !job.fileSize || job.fileSize > PREFETCH_LIMIT || hasFolder) return
     let dead = false
@@ -338,12 +338,8 @@ export default function JobCard({ job, onExpired, onRetry, autosave }) {
                 <i className="fa-solid fa-rotate-right" /> Retry
               </button>
             )}
-            {done && (hasFolder ? (
-              // The folder saves it by itself; a second manual copy would only confuse.
-              <button className="btn btn-primary btn-sm" type="button" disabled title={`Saves automatically to ${folder.name}`}>
-                <i className="fa-solid fa-download" /> Save file
-              </button>
-            ) : (
+            {done && (
+              // Always on: with a folder it only adds a browser copy; the folder save goes ahead regardless.
               <a
                 className="btn btn-primary btn-sm"
                 href={blobUrl || fileUrl(job.id)}
@@ -352,7 +348,7 @@ export default function JobCard({ job, onExpired, onRetry, autosave }) {
               >
                 <i className="fa-solid fa-download" /> Save file{blobUrl ? ' (ready)' : ''}
               </a>
-            ))}
+            )}
           </div>
         </div>
       </div>

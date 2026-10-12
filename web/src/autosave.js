@@ -188,6 +188,7 @@ export function useAutoSave({ pages, enabled, markSaved }) {
   const template = useRef(null) // { on, folder } new tabs copy while locked
   const picking = useRef(0) // folder pickers open right now
   const held = useRef(new Set()) // finished jobs waiting for that picker to close
+  const sentTo = useRef(new Map()) // job id -> 'folder' | 'browser': where its file has gone so far
   const knownPages = useRef(null)
   const [folders, setFolders] = useState({}) // job id -> { handle, name, granted, key }
   const [ready, setReady] = useState(false) // the remembered folders have been looked up
@@ -289,6 +290,7 @@ export function useAutoSave({ pages, enabled, markSaved }) {
   const run = useCallback((job, dir) => {
     stop(job.id)
     noteSaved(job.id)
+    sentTo.current.set(job.id, dir ? 'folder' : 'browser')
     const where = dir ? dir.name : null
     const task = async () => {
       let last = 0
@@ -314,6 +316,7 @@ export function useAutoSave({ pages, enabled, markSaved }) {
       } catch (e) {
         if (e.http) { // a server problem: the browser would hit the same wall
           forgetSaved(job.id)
+          sentTo.current.delete(job.id)
           put(job.id, { phase: 'failed', error: e.message })
           return
         }
@@ -321,6 +324,7 @@ export function useAutoSave({ pages, enabled, markSaved }) {
         // The finished file must not be lost, so the browser gets it instead.
         forgetSaved(job.id)
         downloadToBrowser(job)
+        sentTo.current.set(job.id, 'browser')
         put(job.id, { phase: 'handed', fallbackFrom: dir.name })
         if (e.name === 'NotAllowedError' || e.name === 'SecurityError') regrant(dir, false) // the card says "needs access"
       }
@@ -395,7 +399,16 @@ export function useAutoSave({ pages, enabled, markSaved }) {
     putTabs(ids, t)
     if (lockedRef.current) storeTemplate(t)
     releaseHeld()
-  }, [choose, putTabs, releaseHeld, storeTemplate])
+    // Choosing a folder also brings in finished files that so far only went to the browser.
+    if (t.folder) {
+      for (const job of jobsRef.current) {
+        if (job.status === 'COMPLETED' && sentTo.current.get(job.id) === 'browser' && ids.includes(pageOf.current.get(job.id))) {
+          seen.current.add(job.id)
+          run(job, folderFor(job.id))
+        }
+      }
+    }
+  }, [choose, folderFor, putTabs, releaseHeld, run, storeTemplate])
 
   /** The lock beside the switch: closed, every link tab — open or new — follows this tab's setting. */
   const setLocked = useCallback((pageId, value) => {
@@ -435,12 +448,18 @@ export function useAutoSave({ pages, enabled, markSaved }) {
     applyFolder(jobId, null)
   }, [applyFolder])
 
-  /** The Save file button — only offered with no folder set, so the browser's own download does the work. */
+  /**
+   * The Save file button: the browser's own download does the work. A file already in a folder
+   * keeps its note; this is just an extra copy.
+   */
   const saved = useCallback((job) => {
-    stop(job.id)
-    noteSaved(job.id)
-    put(job.id, { phase: 'saved', where: null })
     markSaved(job.id)
+    if (sentTo.current.get(job.id) === 'folder') return
+    stop(job.id)
+    held.current.delete(job.id)
+    noteSaved(job.id)
+    sentTo.current.set(job.id, 'browser')
+    put(job.id, { phase: 'handed' })
   }, [markSaved, put, stop])
 
   // Restore every link tab's switch and folder, the lock's template, and each download's own
@@ -495,6 +514,7 @@ export function useAutoSave({ pages, enabled, markSaved }) {
       if (!ids.has(id)) {
         storeFolder(id, null)
         if (foldersRef.current[id]) applyFolder(id, null)
+        sentTo.current.delete(id)
       }
     }
     knownJobs.current = ids
@@ -522,6 +542,7 @@ export function useAutoSave({ pages, enabled, markSaved }) {
         }
       } else if (seen.current.delete(job.id)) { // retried: its next completion saves again
         forgetSaved(job.id)
+        sentTo.current.delete(job.id)
         setState((m) => { const rest = { ...m }; delete rest[job.id]; return rest })
       }
     }
