@@ -506,6 +506,11 @@ body {
 .switch.on .switch-knob { transform: translateX(14px); background: #fff; }
 .switch:focus-visible .switch-track { outline: 2px solid var(--accent-2); outline-offset: 2px; }
 .switch:disabled { opacity: 0.5; cursor: not-allowed; }
+.autosave-ctl { display: inline-flex; align-items: center; gap: 6px; }
+.lock-btn { display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; border-radius: 8px; border: 1px solid var(--border-soft); background: var(--glass-bg); color: var(--muted); font-size: 11px; cursor: pointer; transition: color 0.2s, border-color 0.2s, background 0.2s; }
+.lock-btn:hover { color: var(--text); }
+.lock-btn.on { color: var(--accent-2); border-color: var(--accent-2); }
+.lock-btn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
 
 /* Where THIS download is saved. Wraps freely: the downloads column is only ~130px of content
    at a 1000px window, so the text and buttons stack rather than squeeze. */

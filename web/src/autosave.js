@@ -36,9 +36,7 @@ function idb(mode, run) {
     }
   })
 }
-const DEFAULT_KEY = 'folder:*default*'
 const storeFolder = (jobId, h) => idb('readwrite', (s) => (h ? s.put(h, 'folder:' + jobId) : s.delete('folder:' + jobId))).catch(() => {})
-const storeDefault = (h) => idb('readwrite', (s) => (h ? s.put(h, DEFAULT_KEY) : s.delete(DEFAULT_KEY))).catch(() => {})
 const forgetKey = (key) => idb('readwrite', (s) => s.delete(key)).catch(() => {})
 /** Everything remembered as [key, handle] — including keys older versions left behind, so they can be swept. */
 const loadFolders = async () => {
@@ -51,15 +49,19 @@ const loadFolders = async () => {
   }
 }
 
+const OFF = { on: false, folder: null }
+const TEMPLATE_KEY = 'lock:template'
+// A tab remembers its switch and folder together; a handle survives inside an object in IndexedDB.
+const storeTab = (pageId, t) => idb('readwrite', (s) => (t && t.on ? s.put({ on: true, handle: t.folder?.handle || null }, 'tab:' + pageId) : s.delete('tab:' + pageId))).catch(() => {})
+const storeTemplateRaw = (t) => idb('readwrite', (s) => (t ? s.put({ on: !!t.on, handle: t.folder?.handle || null }, TEMPLATE_KEY) : s.delete(TEMPLATE_KEY))).catch(() => {})
+
 const granted = async (h) => (await h.queryPermission({ mode: 'readwrite' })) === 'granted'
 // Re-asking needs a click (user activation), so only ever call this from a click handler.
 const ask = async (h) => (await h.requestPermission({ mode: 'readwrite' })) === 'granted'
 
-// ---- the Auto-save switch --------------------------------------------------------------
-const ON_KEY = 'ez-autosave'
-// Off by default: turning it on prompts for a folder, which we don't want on every search.
-// Only an explicit 'on' (the user flipped the switch) counts.
-const readOn = () => { try { return localStorage.getItem(ON_KEY) === 'on' } catch { return false } }
+// ---- the lock ------------------------------------------------------------------------
+const LOCK_KEY = 'ez-autosave-lock'
+const readLocked = () => { try { return localStorage.getItem(LOCK_KEY) === 'on' } catch { return false } }
 
 // ---- one save per file, even with two tabs open -----------------------------------
 // A second tab restores the same finished jobs and starts its own countdown, so without
@@ -162,83 +164,108 @@ function downloadToBrowser(job) {
 }
 
 /**
- * Saves finished downloads without being asked — when the Auto-save switch is on.
- *
- * Every DOWNLOAD (each card) has its own folder choice:
- *  - A folder is chosen -> that file goes there the moment it is ready, no countdown. Its
- *                          Save file button is off: there is nothing left to do.
- *  - No folder          -> a GRACE_SECONDS countdown. Pressing Save file, or choosing a
- *                          folder, ends it early; otherwise the file lands in the
- *                          browser's Downloads folder when it runs out.
- * With the switch off none of this runs: files wait for Save file, as they always did.
+ * Saves finished downloads without being asked. Auto-save is switched on per link tab, and a
+ * download can still have its own folder on its card:
+ *  - Each link tab has a switch and a folder. Switching ON always asks for that tab's folder;
+ *    switching OFF resets it. The lock makes new link tabs start with the locked tab's setting.
+ *  - A download's own card folder wins, else its link tab's folder.
+ *  - With a folder, the file goes there the moment it is ready. Without one, a GRACE_SECONDS
+ *    countdown hands it to the browser's Downloads folder.
+ *  - While any folder picker is open, a finished file waits ('hold') and saves into the
+ *    folder just chosen.
  *
  * Lives once, in App: the Downloads panel is mounted twice (desktop column and mobile
  * sheet), so doing this inside a card would save every file twice.
  */
-export function useAutoSave({ jobs, enabled, markSaved }) {
-  const [on, setOnState] = useState(readOn)
-  const [folders, setFolders] = useState({}) // job id -> { jobId, handle, name, granted }
-  const [fallback, setFallback] = useState(false) // on, but with no folder to save into
+export function useAutoSave({ pages, enabled, markSaved }) {
+  const jobs = pages.flatMap((p) => p.jobs)
+  const pageOf = useRef(new Map()) // job id -> its link tab's id
+  pageOf.current = new Map(pages.flatMap((p) => p.jobs.map((j) => [j.id, p.id])))
+  const [tabs, setTabs] = useState({}) // page id -> { on, folder }
+  const tabsRef = useRef({})
+  const [locked, setLockedState] = useState(readLocked)
+  const lockedRef = useRef(locked)
+  const template = useRef(null) // { on, folder } new tabs copy while locked
+  const picking = useRef(0) // folder pickers open right now
+  const held = useRef(new Set()) // finished jobs waiting for that picker to close
+  const knownPages = useRef(null)
+  const [folders, setFolders] = useState({}) // job id -> { handle, name, granted, key }
   const [ready, setReady] = useState(false) // the remembered folders have been looked up
-  const [state, setState] = useState({}) // job id -> { phase: wait|saving|saved|failed, ... }
+  const [state, setState] = useState({}) // job id -> { phase: wait|hold|saving|saved|failed, ... }
   const timers = useRef(new Map()) // job id -> countdown timeout (exactly the jobs in 'wait')
   const seen = useRef(new Set()) // finished jobs already handed to begin()
   const knownJobs = useRef(new Set())
   const slots = useRef({ busy: 0, waiting: [] })
   const jobsRef = useRef(jobs)
+  const pagesRef = useRef(pages)
   const foldersRef = useRef({})
   jobsRef.current = jobs
-  const active = enabled && on
+  pagesRef.current = pages
 
-  const defaultRef = useRef(null)
-
-  /** This download's own folder, else the one Auto-save was given when it was switched on. */
-  const folderFor = useCallback((jobId) => foldersRef.current[jobId] || foldersRef.current[DEFAULT_KEY], [])
-
-  const applyDefault = useCallback((f) => {
-    const next = { ...foldersRef.current }
-    if (f) next[DEFAULT_KEY] = { ...f, jobId: DEFAULT_KEY }
-    else delete next[DEFAULT_KEY]
-    foldersRef.current = next
-    defaultRef.current = next[DEFAULT_KEY] || null
-    setFolders(next)
-  }, [])
-
-  /**
-   * Switching Auto-save ON asks for a folder, once. That is the whole point: a page can
-   * only write a file without a dialog through a folder it has been granted, so without
-   * one every "automatic" save is at the mercy of the browser's own download prompt.
-   * Dismissing the picker still turns Auto-save on — it just falls back to handing files
-   * to the browser, and says so.
-   */
-  const setOn = useCallback(async (value) => {
-    setOnState(value)
-    try { localStorage.setItem(ON_KEY, value ? 'on' : 'off') } catch { /* private window: just not remembered */ }
-    if (!value) { setFallback(false); return }
-    if (!canPickFolder || defaultRef.current) return
-    let handle
-    try {
-      handle = await window.showDirectoryPicker({ id: 'ez-save', mode: 'readwrite', startIn: 'downloads' })
-    } catch {
-      setFallback(true) // dismissed — the header explains what that costs
-      return
-    }
-    storeDefault(handle)
-    applyDefault({ handle, name: handle.name, granted: true })
-    setFallback(false)
-  }, [applyDefault])
   const put = useCallback((id, s) => setState((m) => ({ ...m, [id]: s })), [])
   const stop = useCallback((id) => {
     clearTimeout(timers.current.get(id))
     timers.current.delete(id)
   }, [])
+  const tabOn = useCallback((jobId) => !!tabsRef.current[pageOf.current.get(jobId)]?.on, [])
+
+  const putTab = useCallback((pageId, t, persist = true) => {
+    tabsRef.current = { ...tabsRef.current, [pageId]: t }
+    setTabs(tabsRef.current)
+    if (persist) storeTab(pageId, t)
+  }, [])
+
+  const dropTab = useCallback((pageId) => {
+    const rest = { ...tabsRef.current }
+    delete rest[pageId]
+    tabsRef.current = rest
+    setTabs(rest)
+    storeTab(pageId, null)
+  }, [])
+
+  const storeTemplate = useCallback((t) => { template.current = t; storeTemplateRaw(t) }, [])
+
   const applyFolder = useCallback((jobId, f) => {
     const next = { ...foldersRef.current }
-    if (f) next[jobId] = { ...f, jobId }
+    if (f) next[jobId] = { ...f, key: 'folder:' + jobId }
     else delete next[jobId]
     foldersRef.current = next
     setFolders(next)
   }, [])
+
+  /** This download's own folder, else its link tab's. */
+  const folderFor = useCallback((jobId) => foldersRef.current[jobId] || tabsRef.current[pageOf.current.get(jobId)]?.folder || undefined, [])
+
+  /** Record whether the browser still lets us write to this folder — wherever it lives now. */
+  const regrant = useCallback((f, ok) => {
+    if (f.key.startsWith('tab:')) {
+      const pageId = f.key.slice(4)
+      const t = tabsRef.current[pageId]
+      if (t?.folder?.handle === f.handle) putTab(pageId, { ...t, folder: { ...t.folder, granted: ok } })
+    } else {
+      const jobId = f.key.slice('folder:'.length)
+      const cur = foldersRef.current[jobId]
+      if (cur?.handle === f.handle) applyFolder(jobId, { ...cur, granted: ok })
+    }
+  }, [applyFolder, putTab])
+
+  /** Every folder picker goes through here, so a file that finishes meanwhile waits for the answer. */
+  const choose = useCallback(async () => {
+    picking.current++
+    try {
+      return await window.showDirectoryPicker({ id: 'ez-save', mode: 'readwrite', startIn: 'downloads' })
+    } catch {
+      return null // dismissed
+    } finally {
+      picking.current--
+    }
+  }, [])
+
+  const hold = useCallback((job) => {
+    stop(job.id)
+    held.current.add(job.id)
+    put(job.id, { phase: 'hold' })
+  }, [put, stop])
 
   // Folder saves run side by side, up to the cap; any beyond it wait their turn.
   const withSlot = useCallback((task) => {
@@ -290,11 +317,7 @@ export function useAutoSave({ jobs, enabled, markSaved }) {
         forgetSaved(job.id)
         downloadToBrowser(job)
         put(job.id, { phase: 'handed', fallbackFrom: dir.name })
-        const f = foldersRef.current[dir.jobId]
-        if (f && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) {
-          if (dir.jobId === DEFAULT_KEY) applyDefault({ ...f, granted: false })
-          else applyFolder(dir.jobId, { ...f, granted: false }) // the card says "needs access"
-        }
+        if (e.name === 'NotAllowedError' || e.name === 'SecurityError') regrant(dir, false) // the card says "needs access"
       }
     }
     if (dir) {
@@ -303,7 +326,7 @@ export function useAutoSave({ jobs, enabled, markSaved }) {
     } else {
       task() // the browser's own download is instant and keeps its own queue
     }
-  }, [applyDefault, applyFolder, markSaved, put, stop, withSlot])
+  }, [markSaved, put, regrant, stop, withSlot])
 
   // Every automatic save goes through here, so another tab that got there first wins.
   // (Pressing Save file is a decision, not an automation: it always goes ahead.)
@@ -314,82 +337,33 @@ export function useAutoSave({ jobs, enabled, markSaved }) {
   }, [put, run, stop])
 
   const begin = useCallback(async (job) => {
+    if (picking.current) return hold(job) // a folder is being chosen right now: wait for it
     const f = folderFor(job.id)
     if (f) {
-      if (await granted(f.handle).catch(() => false)) return auto(job, f)
+      const ok = await granted(f.handle).catch(() => false)
+      if (picking.current) return hold(job)
+      if (ok) return auto(job, f)
       // The browser has taken the permission back (it does that between visits).
-      // Say so, rather than showing a folder as ready when it isn't.
-      if (f.granted) {
-        if (f.jobId === DEFAULT_KEY) applyDefault({ ...f, granted: false })
-        else applyFolder(job.id, { ...f, granted: false })
-      }
+      if (f.granted) regrant(f, false)
     }
     put(job.id, { phase: 'wait', deadline: Date.now() + GRACE_SECONDS * 1000 })
-    timers.current.set(job.id, setTimeout(() => auto(job, null), GRACE_SECONDS * 1000))
-  }, [applyDefault, applyFolder, auto, folderFor, put])
+    timers.current.set(job.id, setTimeout(() => (picking.current ? hold(job) : auto(job, null)), GRACE_SECONDS * 1000))
+  }, [auto, folderFor, hold, put, regrant])
 
-  // Look up the folders remembered from last time — one per download still on the page —
-  // and sweep the rest: downloads cleared while the page was closed, and the per-link-tab
-  // and shared-folder entries that older versions left behind.
-  useEffect(() => {
-    let live = true
-    ;(async () => {
-      if (canPickFolder) {
-        const present = new Set(jobsRef.current.map((j) => j.id))
-        for (const [key, handle] of await loadFolders()) {
-          if (!handle || !handle.name) { forgetKey(key); continue }
-          if (key === DEFAULT_KEY) {
-            if (live) applyDefault({ handle, name: handle.name, granted: await granted(handle).catch(() => false) })
-            continue
-          }
-          const id = key.startsWith('folder:') ? key.slice('folder:'.length) : null
-          if (!id || !present.has(id)) { forgetKey(key); continue }
-          if (live) applyFolder(id, { handle, name: handle.name, granted: await granted(handle).catch(() => false) })
-        }
-      }
-      if (live) setReady(true)
-    })()
-    return () => { live = false }
-  }, [applyDefault, applyFolder])
-
-  // A download that is gone (cleared, its tab closed) takes its folder choice with it.
-  useEffect(() => {
-    const ids = new Set(jobs.map((j) => j.id))
-    knownJobs.current.delete(DEFAULT_KEY)
-    for (const id of knownJobs.current) {
-      if (!ids.has(id)) {
-        storeFolder(id, null)
-        if (foldersRef.current[id]) applyFolder(id, null)
-      }
-    }
-    knownJobs.current = ids
-  }, [jobs, applyFolder])
-
-  useEffect(() => {
-    // Drop countdowns for files that are gone (cleared, tab closed, retried, logged out) —
-    // and all of them when the switch goes off.
-    const finished = new Set(jobs.filter((j) => j.status === 'COMPLETED').map((j) => j.id))
-    for (const id of [...timers.current.keys()]) {
-      if (active && finished.has(id)) continue
-      stop(id)
-      if (!active) { // forget it entirely, so switching back on starts the countdown afresh
+  /** The picker closed: files that finished meanwhile now save — into the folder just chosen. */
+  const releaseHeld = useCallback(() => {
+    if (picking.current) return
+    const ids = [...held.current]
+    held.current.clear()
+    for (const id of ids) {
+      const job = jobsRef.current.find((j) => j.id === id)
+      if (job && job.status === 'COMPLETED' && !job.saved && tabOn(id)) begin(job)
+      else { // gone, saved, or its tab switched off: let the main effect start it afresh later
         seen.current.delete(id)
         setState((m) => { const rest = { ...m }; delete rest[id]; return rest })
       }
     }
-    if (!active || !ready) return
-    for (const job of jobs) {
-      if (job.status === 'COMPLETED') {
-        if (!job.saved && !seen.current.has(job.id)) {
-          seen.current.add(job.id)
-          begin(job)
-        }
-      } else if (seen.current.delete(job.id)) { // retried: its next completion saves again
-        forgetSaved(job.id)
-        setState((m) => { const rest = { ...m }; delete rest[job.id]; return rest })
-      }
-    }
-  }, [jobs, active, ready, begin, stop])
+  }, [begin, tabOn])
 
   // A file already counting down goes straight to the folder it was waiting for. It must
   // be the EFFECTIVE folder: a card with no choice of its own still inherits Auto-save's,
@@ -400,19 +374,40 @@ export function useAutoSave({ jobs, enabled, markSaved }) {
     if (job) auto(job, folderFor(jobId))
   }, [auto, folderFor])
 
-  const pick = useCallback(async (jobId) => {
-    let handle
-    try {
-      handle = await window.showDirectoryPicker({ id: 'ez-save', mode: 'readwrite', startIn: 'downloads' })
-    } catch {
-      return // dialog dismissed
+  /**
+   * A link tab's switch. ON always asks for that tab's folder — the only way a page can write a
+   * file without a dialog. Dismissing the picker still leaves it on, falling back to the browser.
+   */
+  const setOn = useCallback(async (pageId, value) => {
+    let t = OFF
+    if (value) {
+      putTab(pageId, { on: true, folder: null }, false)
+      const handle = canPickFolder ? await choose() : null
+      t = { on: true, folder: handle && { handle, name: handle.name, granted: true, key: 'tab:' + pageId } }
     }
-    storeFolder(jobId, handle)
-    applyFolder(jobId, { handle, name: handle.name, granted: true }) // choosing it is itself the grant
-    if (!defaultRef.current) { storeDefault(handle); applyDefault({ handle, name: handle.name, granted: true }) }
-    setFallback(false)
-    releaseIfWaiting(jobId)
-  }, [applyDefault, applyFolder, releaseIfWaiting])
+    putTab(pageId, t)
+    if (lockedRef.current) storeTemplate(t)
+    releaseHeld()
+  }, [choose, putTab, releaseHeld, storeTemplate])
+
+  /** The lock beside the switch: locked, new link tabs start with this tab's switch and folder. */
+  const setLocked = useCallback((pageId, value) => {
+    lockedRef.current = value
+    setLockedState(value)
+    try { localStorage.setItem(LOCK_KEY, value ? 'on' : 'off') } catch { /* private window: just not remembered */ }
+    storeTemplate(value ? tabsRef.current[pageId] || OFF : null)
+  }, [storeTemplate])
+
+  /** Choose the folder for this one download's card. A link tab's folder is set by its switch. */
+  const pick = useCallback(async (jobId) => {
+    const handle = await choose()
+    if (handle) {
+      storeFolder(jobId, handle)
+      applyFolder(jobId, { handle, name: handle.name, granted: true }) // choosing it is itself the grant
+      releaseIfWaiting(jobId)
+    }
+    releaseHeld()
+  }, [applyFolder, choose, releaseHeld, releaseIfWaiting])
 
   /** Re-grant a remembered folder after the browser has forgotten the permission. */
   const allow = useCallback(async (jobId) => {
@@ -420,10 +415,9 @@ export function useAutoSave({ jobs, enabled, markSaved }) {
     if (!f) return
     let ok = false
     try { ok = await ask(f.handle) } catch { /* refused */ }
-    if (f.jobId === DEFAULT_KEY) applyDefault({ ...f, granted: ok })
-    else applyFolder(jobId, { ...f, granted: ok })
+    regrant(f, ok)
     if (ok) releaseIfWaiting(jobId)
-  }, [applyDefault, applyFolder, folderFor, releaseIfWaiting])
+  }, [folderFor, regrant, releaseIfWaiting])
 
   /** Drop this download's own choice; it goes back to Auto-save's folder. */
   const clear = useCallback((jobId) => {
@@ -439,19 +433,104 @@ export function useAutoSave({ jobs, enabled, markSaved }) {
     markSaved(job.id)
   }, [markSaved, put, stop])
 
+  // Restore every link tab's switch and folder, the lock's template, and each download's own
+  // folder; sweep whatever no longer belongs to a tab or a download.
+  useEffect(() => {
+    let live = true
+    ;(async () => {
+      if (canPickFolder) {
+        const presentJobs = new Set(jobsRef.current.map((j) => j.id))
+        const presentPages = new Set(pagesRef.current.map((p) => p.id))
+        const restore = async (h, key) => h && h.name ? { handle: h, name: h.name, granted: await granted(h).catch(() => false), key } : null
+        for (const [key, val] of await loadFolders()) {
+          if (key === TEMPLATE_KEY) {
+            if (val && readLocked()) template.current = { on: !!val.on, folder: await restore(val.handle, TEMPLATE_KEY) }
+            else forgetKey(key)
+          } else if (key.startsWith('tab:')) {
+            const pageId = key.slice(4)
+            if (!val || !presentPages.has(pageId)) { forgetKey(key); continue }
+            if (live) putTab(pageId, { on: !!val.on, folder: await restore(val.handle, key) }, false)
+          } else {
+            const id = key.startsWith('folder:') ? key.slice('folder:'.length) : null
+            if (!val || !val.name || !id || !presentJobs.has(id)) { forgetKey(key); continue }
+            if (live) applyFolder(id, { handle: val, name: val.name, granted: await granted(val).catch(() => false) })
+          }
+        }
+      }
+      if (live) setReady(true)
+    })()
+    return () => { live = false }
+  }, [applyFolder, putTab])
+
+  // A new link tab copies the locked setting; a closed one takes its setting with it.
+  const pageIds = pages.map((p) => p.id).join(' ')
+  useEffect(() => {
+    const ids = new Set(pageIds ? pageIds.split(' ') : [])
+    if (knownPages.current) {
+      const t = template.current
+      for (const id of ids) {
+        if (!knownPages.current.has(id) && lockedRef.current && t) {
+          putTab(id, { on: t.on, folder: t.folder && { ...t.folder, key: 'tab:' + id } })
+        }
+      }
+      for (const id of knownPages.current) if (!ids.has(id)) dropTab(id)
+    }
+    knownPages.current = ids
+  }, [pageIds, putTab, dropTab])
+
+  // A download that is gone (cleared, its tab closed) takes its folder choice with it.
+  useEffect(() => {
+    const ids = new Set(jobs.map((j) => j.id))
+    for (const id of knownJobs.current) {
+      if (!ids.has(id)) {
+        storeFolder(id, null)
+        if (foldersRef.current[id]) applyFolder(id, null)
+      }
+    }
+    knownJobs.current = ids
+  }, [jobs, applyFolder])
+
+  useEffect(() => {
+    // Drop countdowns for files that are gone (cleared, tab closed, retried, logged out) —
+    // and every one in a tab whose switch went off.
+    const finished = new Set(jobs.filter((j) => j.status === 'COMPLETED').map((j) => j.id))
+    for (const id of [...timers.current.keys()]) {
+      const on = enabled && tabOn(id)
+      if (on && finished.has(id)) continue
+      stop(id)
+      if (!on) { // forget it entirely, so switching back on starts the countdown afresh
+        seen.current.delete(id)
+        setState((m) => { const rest = { ...m }; delete rest[id]; return rest })
+      }
+    }
+    if (!enabled || !ready) return
+    for (const job of jobs) {
+      if (job.status === 'COMPLETED') {
+        if (tabOn(job.id) && !job.saved && !seen.current.has(job.id)) {
+          seen.current.add(job.id)
+          begin(job)
+        }
+      } else if (seen.current.delete(job.id)) { // retried: its next completion saves again
+        forgetSaved(job.id)
+        setState((m) => { const rest = { ...m }; delete rest[job.id]; return rest })
+      }
+    }
+  }, [jobs, tabs, enabled, ready, begin, stop, tabOn])
+
   return {
-    on,
-    setOn,
-    /** A save is mid-flight. Switching off now would orphan a half-written file. */
-    busy: Object.values(state).some((v) => v && v.phase === 'saving'),
-    folders,
-    folderFor,
-    defaultFolder: folders[DEFAULT_KEY] || null,
-    /** On, but with nothing to save into — the browser will be asked to do it instead. */
-    fallback: on && canPickFolder && !folders[DEFAULT_KEY],
-    dismissed: fallback,
     canPick: canPickFolder,
     state,
+    folders,
+    folderFor,
+    /** This link tab's switch and folder. */
+    tab: (pageId) => tabs[pageId] || OFF,
+    /** Is Auto-save on for the tab this download belongs to? */
+    isOn: (jobId) => !!tabs[pageOf.current.get(jobId)]?.on,
+    /** The folder this download falls back to when its own choice is cleared. */
+    tabFolderFor: (jobId) => tabs[pageOf.current.get(jobId)]?.folder || null,
+    setOn,
+    locked,
+    setLocked,
     pick,
     allow,
     clear,

@@ -81,6 +81,13 @@ function Secs({ to }) {
 /** Where a finished file is going, is on its way, or ended up. */
 function SaveNote({ s, folder }) {
   if (!s) return null
+  if (s.phase === 'hold') {
+    return (
+      <div className="job-note autosave-note">
+        <i className="fa-regular fa-hourglass-half" /> Ready — waiting for you to choose a folder
+      </div>
+    )
+  }
   if (s.phase === 'wait') {
     return (
       <div className="job-note autosave-note">
@@ -186,15 +193,17 @@ export default function JobCard({ job, onExpired, onRetry, autosave }) {
 
   // This download's own folder. Only meaningful while Auto-save is on; off, the card is a
   // plain Save file card again.
-  const autoOn = autosave.on
+  const autoOn = autosave.isOn(job.id)
   const folder = autoOn ? autosave.folderFor(job.id) : undefined
   const ownFolder = autoOn ? autosave.folders[job.id] : undefined // set on this card, not inherited
+  const base = autosave.tabFolderFor(job.id) // this link's folder, what clearing the card's choice falls back to
   const hasFolder = !!folder
   const saveState = autosave.state[job.id]
   // The choice only matters until the file starts to save, so it shows while the download
-  // runs and during the countdown — and not once there is nothing left to decide.
+  // runs and while a finished file waits (countdown, or held for a picker) — and not once
+  // there is nothing left to decide.
   const wantsFolder = autoOn && autosave.canPick && !bad
-    && (ACTIVE.has(job.status) || (done && !job.saved && (!saveState || saveState.phase === 'wait')))
+    && (ACTIVE.has(job.status) || (done && !job.saved && (!saveState || ['wait', 'hold'].includes(saveState.phase))))
 
   // Pre-fetched only so the Save file button is instant. With a folder set that button is
   // off and the saver fetches the file itself, so doing it here too would pull it twice.
@@ -286,8 +295,8 @@ export default function JobCard({ job, onExpired, onRetry, autosave }) {
                   className="btn btn-sm btn-ghost"
                   type="button"
                   onClick={() => autosave.clear(job.id)}
-                  aria-label="Use the Auto-save folder instead"
-                  title={autosave.defaultFolder ? `Use ${autosave.defaultFolder.name} instead` : 'Use the Downloads folder instead'}
+                  aria-label="Use this link's Auto-save folder instead"
+                  title={base ? `Use ${base.name} instead` : 'Use the Downloads folder instead'}
                 >
                   <i className="fa-solid fa-xmark" />
                 </button>

@@ -319,9 +319,9 @@ export default function App() {
     setPages((prev) => prev.map((p) => ({ ...p, jobs: p.jobs.map((j) => (j.id === jobId ? { ...j, saved: true } : j)) })))
   }, [])
 
-  // Finished files save themselves (see autosave.js). Takes every tab's jobs, not just the
-  // visible one, so a download that finishes in a background tab is still saved.
-  const autosave = useAutoSave({ jobs: pages.flatMap((p) => p.jobs), enabled: !!authed, markSaved })
+  // Finished files save themselves (see autosave.js). Takes every tab, not just the visible
+  // one, so a download that finishes in a background tab is still saved.
+  const autosave = useAutoSave({ pages, enabled: !!authed, markSaved })
 
   /** Do the actual server-side clear, without confirmation. */
   async function doClear(pageId) {
@@ -520,6 +520,7 @@ export default function App() {
                 it is hidden and reached from the header via the sheet below. */}
             <div className="workspace-side">
               <DownloadsPanel
+                pageId={active.id}
                 jobs={active.jobs}
                 onClear={onClear}
                 onExpired={onExpired}
@@ -562,6 +563,7 @@ export default function App() {
             </div>
             <div className="sheet-body">
               <DownloadsPanel
+                pageId={active.id}
                 jobs={active.jobs}
                 onClear={onClear}
                 onExpired={onExpired}
