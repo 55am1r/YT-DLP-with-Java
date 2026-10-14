@@ -22,8 +22,15 @@
 # whether the branch actually has unpushed commits, so it retries until it lands.
 #
 # Runs against a LOCAL git clone (passed as $1) on the internal disk, because macOS blocks
-# launchd from touching the project on the /Volumes mount. Push uses the osxkeychain creds.
+# launchd from touching the project on the /Volumes mount.
+#
+# Push always authenticates as the repo owner, never as whichever account `gh` has active.
+# The global git helper is `gh auth git-credential`, which uses the ACTIVE gh login; once
+# someone switched that to another account (no push rights), every push 403'd and the
+# team's link sat on a dead tunnel. The empty helper clears the inherited ones first.
 export PATH="/opt/homebrew/bin:/usr/bin:/bin"
+PUSH_AS="55am1r"
+PUSH_AUTH=(-c credential.helper= -c "credential.helper=!f() { [ \"\$1\" = get ] && echo username=$PUSH_AS && echo \"password=\$(gh auth token -u $PUSH_AS)\"; }; f")
 
 DIR="${1:?pass the local clone path}"
 LOG="/tmp/ytdlp-tunnel.log"
@@ -112,10 +119,10 @@ while true; do
     AHEAD="$(git -C "$DIR" rev-list --count '@{u}..HEAD' 2>/dev/null || echo 0)"
     if [ "${AHEAD:-0}" -gt 0 ]; then
       git -C "$DIR" pull --rebase --quiet >/dev/null 2>&1
-      if git -C "$DIR" push --quiet >/dev/null 2>&1; then
+      if ERR="$(git -C "$DIR" "${PUSH_AUTH[@]}" push --quiet 2>&1)"; then
         say "published $URL ($AHEAD commit(s)) — Netlify will redeploy"
       else
-        say "push failed, $AHEAD commit(s) still pending — retrying in ${CYCLE}s"
+        say "push failed, $AHEAD commit(s) still pending — retrying in ${CYCLE}s: $(echo "$ERR" | tail -1)"
       fi
     fi
   fi
