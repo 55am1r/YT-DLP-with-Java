@@ -226,9 +226,11 @@ open an admin panel instead of the downloader (each has a button to switch to th
 The credentials are stored only as a salted PBKDF2 hash (`app.admin.credential`), both parts
 are case-sensitive, and they must differ from the team login (which is checked first).
 
-- **Where everyone is** — a dotted ASCII world map with a marker for every device: its
-  precise location if the person chose to share it, otherwise the approximate city of its
-  IP address (office-LAN users appear at the Mac's own location). Online devices pulse.
+- **Where everyone is** — a dotted 3-D globe with a pin for every device: its precise
+  location if its browser allows location, otherwise the approximate city of its IP address
+  (office-LAN users appear at the Mac's own location). Online devices pulse; drag to orbit,
+  scroll to zoom, click a pin to fly to it and open the device. It draws from an offline land
+  mask, so no map tiles are fetched, and three.js ships only in the admin chunk.
 - **Users** — every browser that has signed in: device, last seen, location, ISP, route
   (internet / office LAN / this Mac), downloads, data and visits. A drawer shows its IP
   history, location details, downloads and activity; devices can be named or blocked.
@@ -242,13 +244,13 @@ are case-sensitive, and they must differ from the team login (which is checked f
 - **System** — whether a restart is safe right now, the current public and LAN links,
   yt-dlp version, free disk space, and an announcement banner for the whole team.
 
-**Location consent.** Teammates see an optional card — *Share your location with the
-EZ-Tube admin?* The browser's own prompt appears only after they press **Share location**;
-**No thanks** is respected for 30 days. While sharing, the position is refreshed each time
-the app opens and the footer offers **Stop sharing**, which deletes the stored position (so
-does turning location off in the browser). Browsers allow location only over HTTPS, so it is offered on the public (tunnel)
-link, not the plain-http LAN address. Approximate locations come from ipwho.is (falling
-back to ipinfo.io), cached for 14 days; `app.geo.enabled=false` stops all lookups.
+**Location.** The site never asks for a location. A browser that already allows EZ-Tube to
+use location (in its own site settings) sends a fresh position quietly each time the app
+opens; everyone else appears at their IP's approximate city. Blocking location in the
+browser deletes the stored position. Browsers allow location only over HTTPS, so precise
+positions come only from the public (tunnel) link, not the plain-http LAN address.
+Approximate locations come from ipwho.is (falling back to ipinfo.io), cached for 14 days;
+`app.geo.enabled=false` stops all lookups.
 
 **Records** live in `app.admin.data-dir` (default `~/.ytdlp-web/admin-data`, owner-only) —
 not the work directory, which is wiped on every restart — and are kept for
