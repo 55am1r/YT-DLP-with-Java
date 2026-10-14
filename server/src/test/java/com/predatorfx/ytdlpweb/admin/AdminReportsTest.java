@@ -227,4 +227,18 @@ class AdminReportsTest {
         Function<String, String> unknown = id -> AdminReports.name(null);
         assertEquals("Unknown device", unknown.apply("x"));
     }
+
+    @Test
+    void publicLinkIsNeverCloudflaresOwnApi() {
+        String apiError = "ERR failed to request quick Tunnel: Post \"https://api.trycloudflare.com/tunnel\": "
+                + "context deadline exceeded\n";
+        String banner = "INF |  https://whatever-created-cat-prozac.trycloudflare.com          |\n";
+
+        // A restart that has not got a new tunnel yet: the errors come after the last real address.
+        assertEquals("https://whatever-created-cat-prozac.trycloudflare.com",
+                AdminReports.lastTunnelUrl(banner + apiError + apiError));
+        assertNull(AdminReports.lastTunnelUrl(apiError));
+        assertEquals("https://next-tunnel-words-here.trycloudflare.com",
+                AdminReports.lastTunnelUrl(banner + apiError + "INF |  https://next-tunnel-words-here.trycloudflare.com  |\n"));
+    }
 }

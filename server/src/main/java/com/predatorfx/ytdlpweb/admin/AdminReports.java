@@ -55,7 +55,8 @@ public class AdminReports {
     private static final long DAY = Duration.ofDays(1).toMillis();
     private static final Pattern YOUTUBE_ID = Pattern.compile(
             "(?:youtube\\.com/(?:watch\\?(?:[^#]*&)?v=|shorts/|live/|embed/)|youtu\\.be/)([A-Za-z0-9_-]{11})");
-    private static final Pattern TUNNEL_URL = Pattern.compile("https://[a-z0-9-]+\\.trycloudflare\\.com");
+    /** Skips api.trycloudflare.com: cloudflared names its own API in "failed to request quick Tunnel" errors. */
+    private static final Pattern TUNNEL_URL = Pattern.compile("https://(?!api\\.)[a-z0-9-]+\\.trycloudflare\\.com");
     private static final Set<String> SECURITY_EVENTS = Set.of(ActivityEvent.LOGIN_FAILED, ActivityEvent.LOCKED_OUT,
             ActivityEvent.ADMIN_LOGIN, ActivityEvent.ADMIN_ACTION);
 
@@ -651,15 +652,20 @@ public class AdminReports {
                     // keep reading
                 }
             }
-            Matcher m = TUNNEL_URL.matcher(new String(buf.array(), 0, buf.position(), StandardCharsets.UTF_8));
-            String last = null;
-            while (m.find()) {
-                last = m.group();
-            }
-            return last;
+            return lastTunnelUrl(new String(buf.array(), 0, buf.position(), StandardCharsets.UTF_8));
         } catch (IOException e) {
             return null;
         }
+    }
+
+    /** The last quick-tunnel address in a stretch of cloudflared's log, or null. */
+    static String lastTunnelUrl(CharSequence log) {
+        Matcher m = TUNNEL_URL.matcher(log);
+        String last = null;
+        while (m.find()) {
+            last = m.group();
+        }
+        return last;
     }
 
     /** http://<this Mac's LAN address>:<port>, for teammates in the office. */

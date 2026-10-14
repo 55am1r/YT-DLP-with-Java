@@ -5,7 +5,9 @@ set -euo pipefail
 export PATH="/opt/homebrew/bin:$PATH"
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/ytdlp-tunnel.log 2>/dev/null | tail -1)
+# api.trycloudflare.com appears in cloudflared's error lines; it is never the tunnel.
+# `|| true`: under pipefail a log with no URL would otherwise exit before the message below.
+URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/ytdlp-tunnel.log 2>/dev/null | grep -vx 'https://api\.trycloudflare\.com' | tail -1 || true)
 if [ -z "$URL" ]; then
   echo "No tunnel URL found — is the tunnel running?  (bash tunnel-url.sh)"
   exit 1

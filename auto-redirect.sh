@@ -49,7 +49,9 @@ say() { echo "$(date '+%F %T') $*"; }
 
 app_ok()      { curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:8080/api/health 2>/dev/null; }
 internet_ok() { curl -fsS --max-time 10 -o /dev/null https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null; }
-tunnel_url()  { grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$LOG" 2>/dev/null | tail -1; }
+# api.trycloudflare.com is cloudflared's own API, named in its "failed to request quick
+# Tunnel" errors — never a tunnel. Taking it for one once sent the team's link there.
+tunnel_url()  { grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$LOG" 2>/dev/null | grep -vx 'https://api\.trycloudflare\.com' | tail -1; }
 tunnel_ok()   { [ -n "$1" ] && curl -fsS --max-time 20 -o /dev/null "$1/api/health" 2>/dev/null; }
 restart()     { say "restarting $1"; launchctl kickstart -k "$DOMAIN/$1" 2>&1 | sed 's/^/    /'; }
 
