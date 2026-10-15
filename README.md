@@ -179,4 +179,4 @@ the [latest release](https://github.com/55am1r/YT-DLP-with-Java/releases/latest)
 <sub>Downloading is governed by each source site's terms. Use EZ-Tube only for content you have
 the right to download.</sub>
 
-<div align="center"><sub>Built by <b>PredatorFX</b> · for the team</sub></div>
+<div align="center"><sub>Built by <b>PredatorFX</b></sub></div>
