@@ -1,438 +1,182 @@
-# EZ-Tube
+<div align="center">
 
-A self-hosted web application for downloading audio and video from YouTube, built for
-a production team that needs source-quality media on demand.
+# ▼ EZ-Tube
 
-One machine runs the server. Everyone else opens a link in their browser, picks what
-they want, and the finished file downloads to **their own** computer. No per-seat
-licences, no upload limits, no third-party site covered in adverts, and nothing leaves
-hardware you control.
+**Source-quality YouTube downloads, built for a production team.**
+
+Up to 8K · lossless by default · no ads · no caps
+
+### [Open EZ-Tube →](https://github.com/55am1r/YT-DLP-with-Java/releases/latest)
+
+<sub>The live link ships with every <a href="https://github.com/55am1r/YT-DLP-with-Java/releases">release</a>.
+Sign in with your team login.</sub>
+
+<br>
+
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)
+![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-4-6DB33F?logo=springboot&logoColor=white)
+![yt-dlp](https://img.shields.io/badge/engine-yt--dlp-FF0000?logo=youtube&logoColor=white)
+![FFmpeg](https://img.shields.io/badge/FFmpeg-007808?logo=ffmpeg&logoColor=white)
+
+</div>
+
+---
+
+## The promise
+
+Public download sites cap the resolution, bury the button under adverts, quietly re-encode
+"4K" into something softer, and stop working whenever YouTube changes something. EZ-Tube was
+built so a production team never has to put up with any of that.
+
+- **The quality it was published at.** Video and audio are merged exactly as they came — no
+  re-encode unless you ask for one. A 4K60 source arrives as 4K60.
+- **Files that open in your editor.** The default MP4 opens in QuickTime, Premiere Pro,
+  Final Cut Pro and DaVinci Resolve — sound included.
+- **No adverts, no watermarks, no caps.** No resolution ceiling, no length limit, no daily
+  quota.
+- **Numbers you can trust.** Every file-size figure on this page was measured on real
+  downloads, not copied from codec marketing.
+- **Nothing left behind.** Finished files are deleted from the server two hours after they
+  are ready.
+- **It keeps working.** The download engine keeps itself current, and the service repairs its
+  own public link when the connection drops.
+
+---
+
+## By the numbers
+
+| | |
+|---:|---|
+| **8K** | the ceiling — every resolution a video publishes is offered, from 144p to 4320p, at 60 fps where the source has it |
+| **0** | re-encodes by default: original streams, merged losslessly |
+| **up to 60%** | smaller files with AV1 — 40–55% of the source size, measured |
+| **5** | compression choices: Original, H.265, H.264, AV1, VP9 |
+| **3 + 4** | video containers (MP4 · MKV · WEBM) and audio formats (MP3 · M4A · OPUS · WAV) |
+| **0.8 s** | between progress updates — speed, time left, and a bar for every stage |
+| **8** | pieces of each file fetched in parallel |
+| **15 + 40** | automatic transfer and fragment retries, so a dropped connection doesn't fail the job |
+| **3** | heavy jobs at a time; the rest queue, so 30 people clicking at once never stall the machine |
+| **4** | saves running side by side, straight into your chosen folder |
+| **100** | playlist items checked before a one-click zip is offered |
+| **20 s** | between the service's own health checks |
+| **2 h** | before a finished file is cleared from the server |
+| **30–40** | teammates served from a single machine |
+| **0** | cloud bill — it runs on hardware the team already owns |
+
+---
+
+## What you can do
+
+**Paste any YouTube link** — a video, a Short, a playlist or a YouTube Music track — and choose
+from the resolutions that video really offers, labelled the way editors talk: `2160p · UHD`,
+`1440p · QHD`, `1080p · FHD`. Nothing is offered that can't be delivered.
+
+### Pick exactly what you need
+
+- **Video or audio.** Audio comes out as MP3, M4A, OPUS or WAV, tagged with its title and
+  cover art.
+- **Auto or Advanced.** *Auto* hands you an MP4 that plays anywhere. *Advanced* lets you pick
+  the container and the compression model yourself.
+- **Trim before you download.** A YouTube-style range slider cuts out just the part you need.
+  Paste a link with a timestamp (`?t=90`) and the slider opens at that moment.
+- **Playlists, item by item.** Tick the videos you want and give each its own settings — one
+  pass can produce some MP4s and some MP3s. When every video shares the same resolutions, take
+  the whole set as a single `.zip`.
+
+### Watch it happen
+
+- **Live progress** with speed, time left, and separate bars for video, audio, finishing and
+  any conversion.
+- **Pause, resume or cancel** any download.
+- **Retry that picks up where it stopped.** A drop at 70% only fetches the missing 30%.
+- **Duplicate check.** If the same file with the same settings is already on the server, take
+  that copy instead of downloading it again.
+
+### Get the file
+
+- **Auto-save to a folder.** Choose a folder once and every finished download writes itself
+  there — no dialog, no button. Each link, or each file, can go to its own folder (Chrome and
+  Edge). No folder? Files go to your browser's downloads after a 30-second grace period.
+- **Resumable saves.** A browser download broken by a Wi-Fi switch carries on instead of
+  starting over.
+
+### Work the way you like
+
+- **Several links at once,** each in its own tab with its own settings and downloads.
+- **Pick up where you left off.** Refresh, or close the site and come back later: your tabs,
+  settings and download history are still there, and downloads keep running on the server in
+  the meantime.
+- **Made for phones too.** On a small screen the layout becomes a full-screen app with a
+  slide-in downloads sheet.
+- **Light and dark themes,** with motion that respects your system's reduce-motion setting.
+
+---
+
+## Formats and file sizes
+
+| Compression | Size vs. source | Best for |
+|---|---|---|
+| **Original** | 100% | Untouched streams. Best quality, fastest. |
+| **H.265 / HEVC** | 65–90% | *Recommended.* Hardware-encoded on Apple Silicon, so a 4K clip takes minutes, not hours. |
+| **H.264 / AVC** | 80–90% | Maximum compatibility — older phones, TVs and editing suites. |
+| **AV1** | 40–55% | *Best savings.* Software-encoded, so noticeably slower. |
+| **VP9** | ~100% | Players that require VP9. It won't shrink a YouTube file, and EZ-Tube says so. |
+
+Only the options the server can actually deliver are offered, and only in containers that can
+hold them — H.265 is never offered inside WEBM. Auto MP4s and every re-encoded MP4 carry AAC
+audio, so they never open silent in Premiere.
+
+> **Why the sizes are honest.** YouTube already ships efficient AV1 and VP9, so a typical
+> "quality" encoder setting makes files *bigger* — one test turned a 101 MB source into
+> 441 MB. EZ-Tube targets a share of the source bitrate instead, which is what makes the
+> savings above real.
+
+---
+
+## Built to stay up
+
+- **Self-updating engine.** An outdated yt-dlp is the most common reason downloads break.
+  EZ-Tube checks for a new release every 3 hours and upgrades itself in the background — never
+  in the middle of your download.
+- **Self-healing link.** The service checks itself every 20 seconds. If the public connection
+  drops, it brings it back and re-points the team's link on its own — nobody has to reboot
+  anything.
+- **Retries built in.** YouTube occasionally drops a piece of a file under load; the retries
+  absorb it before you ever see an error.
+- **A fair queue.** Heavy work is capped so the machine stays responsive for everyone; extra
+  downloads wait their turn instead of slowing every job down.
+- **Tidy by design.** Each finished file shows a countdown and is cleared after two hours, so
+  the disk never quietly fills up.
+- **Protected access.** Team sign-in over HTTPS, with repeated wrong passwords locked out
+  automatically.
+
+---
+
+## Under the hood
 
 | | |
 |---|---|
-| **Frontend** | React 19 + Vite |
-| **Backend** | Java 21 + Spring Boot 4 |
-| **Media engine** | `yt-dlp` + `ffmpeg` / `ffprobe` |
-| **Runs on** | macOS (Apple Silicon or Intel), self-hosted |
-| **Cost** | Free — your own hardware, no cloud bill |
-
----
-
-## Why it exists
-
-Off-the-shelf download sites cap resolution, inject adverts, re-encode silently, and
-break whenever YouTube changes something. This build removes those constraints:
-
-- **True source quality.** Video and audio streams are merged **losslessly** by
-  default, so a 4K60 source stays 4K60 — no generational quality loss.
-- **It keeps working.** An outdated `yt-dlp` is the single most common cause of
-  downloads failing without explanation. The server checks its own version and
-  updates itself before that becomes your problem.
-- **It scales to a team.** A bounded worker pool means thirty people clicking
-  *Download* at once queues neatly instead of overwhelming the machine.
-- **It respects the machine.** Finished files are swept automatically, duplicate
-  requests are caught before they cost bandwidth, and heavy work is capped.
-
----
-
-## Features
-
-### Media selection
-
-- **Any YouTube link** — single video, playlist, Shorts, or YouTube Music.
-- **Real format detection.** Quality options come from the formats that specific
-  video actually publishes, not a fixed list, so nothing is offered that can't be
-  delivered. Labels use broadcast shorthand — `2160p · UHD`, `1440p · QHD`,
-  `1080p · FHD`.
-- **Audio extraction** — MP3, M4A, OPUS or WAV, with metadata and embedded cover art
-  where the container supports it.
-- **Per-link tabs.** Several links can be analysed at once, each with its own
-  settings and its own download list.
-- **Refresh control.** A per-item refresh re-reads one link's available formats from
-  the server without reloading the page or disturbing other work in progress.
-
-### Auto / Advanced format modes
-
-Every format choice — globally and for each playlist item — follows the same shape:
+| **Frontend** | React 19 · Vite |
+| **Backend** | Java 21 · Spring Boot 4 |
+| **Media engine** | yt-dlp · FFmpeg |
+| **Encoding** | VideoToolbox hardware encoders on Apple Silicon · SVT-AV1 |
+| **Delivery** | Self-hosted, published over HTTPS through Cloudflare |
 
 ```
-Video ─┬─ Auto      → MP4 (H.264 + AAC), plays anywhere → resolution → download
-       └─ Advanced  → container → compression model → resolution → download
+server/   Spring Boot backend — download engine, job queue, REST API
+web/      React frontend
+deploy/   service definitions that keep EZ-Tube running around the clock
+legacy/   the original command-line downloader EZ-Tube grew from
 ```
 
-- **Auto** is an MP4 that opens in QuickTime, Premiere, Final Cut and DaVinci. Up to
-  1080p YouTube serves H.264 + AAC, which is taken as-is — no re-encode. Above that
-  YouTube only has VP9/AV1 (and Opus audio), which Premiere cannot decode and QuickTime
-  will not play, so the video is converted to H.264 at roughly twice the source bitrate
-  on the hardware encoder. That costs a little time and file size; it is the price of a
-  file every editor accepts. Pick **Advanced → Original** to keep YouTube's streams
-  untouched.
-- **Advanced** exposes the container (MP4 / MKV / WEBM) and the compression model.
-
-### Compression models
-
-Offered options are filtered against what the host's `ffmpeg` actually reports at
-startup, and against what the chosen container can legally hold — H.265 is never
-offered inside WEBM, because WEBM cannot store it.
-
-| Model | Measured size | Notes |
-|---|---|---|
-| **Original** | full size | No re-encode. Best quality, fastest. |
-| **H.265 / HEVC** | 65–90% | *Recommended.* Encoded on the Mac's media engine, so it stays quick. |
-| **H.264 / AVC** | 80–90% | Maximum compatibility — older phones, TVs, editing suites. |
-| **AV1** | 40–55% | *Best savings.* Software-encoded, so noticeably slower. |
-| **VP9** | ~100% | For players that require VP9; does not shrink YouTube sources. |
-
-Inside an **MP4**, every compression model also carries **AAC audio** — YouTube's own AAC
-stream is fetched, so nothing is converted. YouTube's default audio is Opus, which
-Premiere does not reliably read from an MP4 (the usual cause of a picture with no sound);
-if a video has no AAC to offer, the audio is converted in the same ffmpeg pass that
-encodes the video. MKV and WEBM keep Opus, and **Original** keeps whatever YouTube sent.
-
-Every figure above was **measured on real downloads**, not taken from codec
-marketing. This matters: YouTube already ships efficient AV1/VP9, so a quality-based
-encoder setting produces files *larger* than the original — one measurement returned
-441 MB from a 101 MB source. Rate control therefore targets a share of the source
-bitrate, which is what makes the advertised saving actually happen. VP9 is labelled
-honestly rather than implying a saving it cannot deliver.
-
-On Apple Silicon, H.265 and H.264 run on the hardware media engine, so a 4K clip
-finishes in minutes rather than hours and the CPU stays free for other jobs.
-
-### Playlists
-
-- **Per-item control.** Tick individual videos; each carries its own type
-  (video/audio), quality, container and compression. One playlist can produce some
-  MP4s and some MP3s in a single pass.
-- **Honest zip gating.** "Download all as one `.zip`" is offered **only** when every
-  item genuinely offers the same resolutions, and then only at those shared
-  resolutions. Otherwise the reason is shown and the list switches to per-item
-  selection — a single quality setting across items that don't share it would
-  quietly hand people different files.
-
-### Downloads and job control
-
-- **Live progress** with transfer speed, ETA, elapsed time and final file size.
-  The card breaks a job into stages — video, audio, finalizing, and (when a re-encode
-  follows) converting or compressing — each with its own bar, so a measured encode
-  percentage never overwrites the estimated merge/thumbnail progress before it.
-- **Pause, resume and cancel** on any running job.
-- **Trimming** via a YouTube-style range slider, cut at keyframes. If the pasted link
-  carries a timestamp (`?t=90`), the slider opens pre-set to it; trimming is opt-in
-  and revertible.
-- **Duplicate guard.** A request that would re-download an identical file is caught
-  and offered as a choice: reuse the copy already on the server, or download it
-  again. This is the main defence against the same 4K video being fetched and stored
-  five times by five people.
-- **Retry.** A failed download, or one whose file the server lost on a restart,
-  offers a one-click retry that re-runs with the exact original settings.
-- **Always-visible section.** The Downloads area and its Clear button are shown at all
-  times, with a "no downloads yet" placeholder when empty.
-- **Auto-save.** A finished file can save itself, so nobody has to come back and press *Save
-  file*. A switch next to *Clear* turns it on or off (remembered per browser). Turning it
-  **on** asks once for a folder — that single answer is what makes everything after it
-  silent, because a web page can only write a file without a dialog through a folder it has
-  been granted. Every download then writes straight into that folder the moment it is ready,
-  with no countdown and no prompt, and its *Save file* button is greyed out. Each download
-  card can point at a different folder if you want (*Change*), and *✕* puts it back on the
-  shared one. Needs Chrome or Edge on https or localhost.
-  If no folder is chosen, files are instead handed to the browser's own downloader after
-  30s — which **may ask where to save each one** (Chrome's *Ask where to save each file
-  before downloading*), and which never reports back, so those cards say "Sent to your
-  browser" rather than claiming a save that cannot be confirmed. Saves run side by side (up
-  to four at once) and the rest wait their turn. It runs in the browser, so the tab must be
-  open; a file nobody saved stays on the server for its normal two hours.
-- **Automatic cleanup.** Finished files carry a visible countdown and are deleted on
-  a TTL, so the disk doesn't silently fill.
-
-### Session persistence
-
-- **Survives refresh and reopening.** Analysed tabs, their settings and the download
-  history are saved in the browser and restored on load — a reload never loses your
-  place. A phone that closes and reopens the site comes back to the same state, and
-  the download it left running continues on the server in the meantime.
-- **Refresh safety.** On desktop, refreshing while a download is live prompts a
-  confirmation first; on mobile it simply continues.
-- **Settings stick per tab.** Switching between tabs — or a full refresh — keeps every
-  panel's selections intact, and downloads keep running throughout.
-- **Closing a tab** removes that link's files from the server, confirming first if a
-  download is running or a finished file was never saved.
-
-### Reliability
-
-- **yt-dlp freshness guard.** The server compares its installed version against the
-  latest release and runs `brew upgrade` when behind. This runs in the background and
-  never blocks a download.
-- **Restarting wipes downloads in progress.** On startup the server deletes everything in
-  its work folder, so `restart.sh` (or a crash, or a second copy of the app pointed at the
-  same folder) destroys any download still running — the files cannot be recovered. Restart
-  only when the Downloads list is empty.
-- **Stays reachable by itself.** A watchdog (the `com.predatorfx.ytdlp-redirect` agent)
-  checks every 20s that the app answers locally, that the tunnel answers from the public
-  side, and that the redirect page points at the live tunnel URL. cloudflared retries a
-  dropped connection on its own, backing off up to about a minute; when it instead sits
-  there holding a dead tunnel, launchd's `KeepAlive` never fires because the process has
-  not exited, so the watchdog restarts it after ~3 minutes unreachable — but only while
-  the internet is actually up, since during a real outage there is nothing to fix. The app
-  itself is only restarted after ~5 minutes silent, because a restart discards every
-  download in progress. Publishing the URL retries until it genuinely lands: the previous
-  version rewrote and committed the page *before* pushing and then compared against that
-  same file, so a push that failed during the outage was never retried and the team's link
-  stayed pointed at a dead tunnel until the Mac was rebooted. Log: `/tmp/ytdlp-redirect.log`,
-  quiet unless something is wrong.
-- **Concurrency cap.** A bounded worker pool with a queue; the limit is configurable.
-- **Transfer retries.** Fragment and extractor retries, added after testing showed
-  YouTube intermittently dropping fragments under parallel load — failures that
-  succeeded on a second attempt.
-- **Resumable transfers.** File delivery supports HTTP byte ranges with strong
-  validators, so a browser download broken by a network drop resumes from where it
-  stopped instead of starting over.
-- **Resume on retry.** A job that fails mid-download keeps its partial data on the
-  server; Retry re-runs it in place and yt-dlp continues from the partial file — a
-  drop at 70% only re-downloads the missing 30%.
-
-### Interface
-
-- **Two-column workspace.** On a wide screen the downloads sit to the right of the
-  analysed panel and fill the empty space; the panel keeps its size whether downloads
-  are present or not. The columns stack on narrower screens.
-- **Tabs.** Every analysed link is a tab — shown even for a single link — in one
-  strip that always keeps the active tab in view. On desktop, overflow is navigated
-  by circular `<` / `>` arrow buttons that appear only when the strip overflows and
-  fade the tabs beneath them for a smooth transition. On mobile, the strip scrolls
-  natively by touch — no arrows.
-- **Mobile downloads sheet.** Below 750px the downloads column moves off-canvas and
-  is opened by a ⋮ button next to Log out; the sheet slides in from the right and
-  closes by tapping the backdrop or the ← in its corner. A red counter on the ⋮
-  shows the current job count.
-- **Responsive across screen sizes.** Below 750px the layout goes full-bleed and
-  re-stacks — thumbnails go full width above their controls rather than shrinking
-  into stamps — so a phone feels like an app rather than a scaled-down web page.
-- **Responsive images.** Thumbnails ship a `srcset`, so a phone fetches a small
-  variant instead of downloading a full-size image to draw it a few hundred pixels
-  wide — a meaningful saving across a playlist of twenty.
-- **Clean, true-shape thumbnails.** The preview frame takes the image's own aspect
-  ratio and the image fills it — no black bars, no gradient backdrop, at any aspect
-  including square album art.
-- **Light and dark themes**, each with its own tuned control surfaces, plus restrained
-  entrance and hover motion that respects `prefers-reduced-motion`.
-- **Session login.** Cookie-based auth, credentials kept out of version control. The
-  owner's admin login uses the same screen — see below.
-
-### Admin panel
-
-Owner-only. The admin's own username and password, typed into the normal login screen,
-open an admin panel instead of the downloader (each has a button to switch to the other).
-The credentials are stored only as a salted PBKDF2 hash (`app.admin.credential`), both parts
-are case-sensitive, and they must differ from the team login (which is checked first).
-
-- **Where everyone is** — a dotted 3-D globe with a pin for every device: its precise
-  location if its browser allows location, otherwise the approximate city of its IP address
-  (office-LAN users appear at the Mac's own location). Online devices pulse; drag to orbit,
-  scroll to zoom, click a pin to fly to it and open the device. It draws from an offline land
-  mask, so no map tiles are fetched, and three.js ships only in the admin chunk.
-- **Users** — every browser that has signed in: device, last seen, location, ISP, route
-  (internet / office LAN / this Mac), downloads, data and visits. A drawer shows its IP
-  history, location details, downloads and activity; devices can be named or blocked.
-- **Downloads** — the complete log, searchable and filterable by device, result, type and
-  period, with a CSV export.
-- **Insights** — downloads per day, busiest hours, most-downloaded videos, audio vs video,
-  quality and format mix, top places, most active devices.
-- **Security** — wrong logins and where they came from. Ten wrong attempts from one IP (an
-  IPv6 /64) in 15 minutes lock it out for 10 minutes. IPs and devices can be blocked and
-  unblocked. Every admin action is logged.
-- **System** — whether a restart is safe right now, the current public and LAN links,
-  yt-dlp version, free disk space, and an announcement banner for the whole team.
-
-**Location.** The site never asks for a location. A browser that already allows EZ-Tube to
-use location (in its own site settings) sends a fresh position quietly each time the app
-opens; everyone else appears at their IP's approximate city. Blocking location in the
-browser deletes the stored position. Browsers allow location only over HTTPS, so precise
-positions come only from the public (tunnel) link, not the plain-http LAN address.
-Approximate locations come from ipwho.is (falling back to ipinfo.io), cached for 14 days;
-`app.geo.enabled=false` stops all lookups.
-
-**Records** live in `app.admin.data-dir` (default `~/.ytdlp-web/admin-data`, owner-only) —
-not the work directory, which is wiped on every restart — and are kept for
-`app.admin.retention-days` (365).
+This repository is the source of the hosted EZ-Tube service. To use EZ-Tube, open the link in
+the [latest release](https://github.com/55am1r/YT-DLP-with-Java/releases/latest).
 
 ---
 
-## Requirements
+<sub>Downloading is governed by each source site's terms. Use EZ-Tube only for content you have
+the right to download.</sub>
 
-| Tool | Purpose |
-|------|---------|
-| Java 21 | Runs the backend |
-| Node + npm | Builds the React UI |
-| `yt-dlp` | Media extraction |
-| `ffmpeg` (with `ffprobe`) | Merging, compression, inspection |
-| Homebrew | Used by the self-update guard |
-
-```bash
-brew install yt-dlp ffmpeg node temurin
-```
-
-> `yt-dlp` installed via Homebrew must be updated with `brew upgrade` — `yt-dlp -U`
-> hangs on a brew-managed install. The freshness guard already accounts for this.
-
----
-
-## Setup
-
-1. **Create your configuration** (this file is deliberately not in version control):
-
-   ```bash
-   cp server/src/main/resources/application.properties.example \
-      server/src/main/resources/application.properties
-   ```
-
-2. **Edit it** and set, at minimum:
-   - `app.auth.username` / `app.auth.password` — your own credentials
-   - `ytdlp.work-dir` — an absolute path on a disk with room for temporary files
-   - `ytdlp.bin` / `ffmpeg.bin` / `brew.bin` — absolute paths
-
-   Absolute binary paths are required: under `launchd`, Homebrew's `bin` is not on
-   `PATH`, and Java's `ProcessBuilder` resolves program names against the JVM's
-   inherited `PATH`.
-
-3. **Build and run:**
-
-   ```bash
-   bash build.sh     # builds the React UI, then the runnable jar
-   bash start.sh     # starts the server and prints the URL to share
-   ```
-
-`start.sh` prints both a local address and your machine's LAN address. Share the LAN
-one with the team. If macOS blocks incoming connections, allow `java` in
-**System Settings → Network → Firewall → Options**.
-
-### Always-on service
-
-`deploy/` contains LaunchAgent templates so the server starts at login and restarts if
-it exits:
-
-```bash
-cp deploy/com.predatorfx.ytdlp-web.plist ~/Library/LaunchAgents/
-launchctl load -w ~/Library/LaunchAgents/com.predatorfx.ytdlp-web.plist
-```
-
-`restart.sh` rebuilds and reloads the service in one step after a code change.
-
-### Access beyond the LAN
-
-For teammates on other networks, the deployment scripts support a Cloudflare tunnel
-that publishes the login-protected app over HTTPS. Free "quick" tunnels mint a new
-hostname on every restart; a named tunnel on your own domain gives a stable address
-and materially better throughput.
-
----
-
-## Configuration reference
-
-| Key | Default | Meaning |
-|-----|---------|---------|
-| `server.port` | `8080` | Port the app listens on |
-| `server.address` | `0.0.0.0` | Bind to all interfaces so the LAN can reach it |
-| `app.auth.enabled` | `true` | Require login |
-| `app.auth.username` / `app.auth.password` | — | Team credentials; keep out of git |
-| `ytdlp.work-dir` | — | Where temporary downloads land |
-| `ytdlp.max-concurrent-jobs` | `3` | Simultaneous heavy jobs; the rest queue |
-| `ytdlp.update-check-interval-minutes` | `180` | How often to re-check yt-dlp |
-| `ytdlp.file-ttl-minutes` | `120` | How long a finished file survives |
-| `app.admin.credential` | empty (admin off) | Admin login as a salted hash; the one-line generator is in `application.properties.example` |
-| `app.admin.data-dir` | `~/.ytdlp-web/admin-data` | Where admin records are kept (survives restarts) |
-| `app.admin.retention-days` | `365` | Records older than this are deleted nightly |
-| `app.admin.tunnel-log` | `/tmp/ytdlp-tunnel.log` | Where the System tab reads the current public link |
-| `app.geo.enabled` | `true` | Look up approximate locations of IP addresses |
-
----
-
-## Development
-
-Run the backend and the Vite dev server separately for hot reload:
-
-```bash
-# terminal 1 — backend on :8080
-cd server && sh gradlew bootRun
-
-# terminal 2 — UI on :5173, proxies /api to :8080
-cd web && npm run dev
-```
-
-### Project structure
-
-```
-.
-├── build.sh / start.sh / restart.sh    # build, run, redeploy
-├── deploy/                             # LaunchAgent templates
-├── legacy/SongDownloader.java          # the original CLI this grew from
-├── server/                             # Spring Boot backend
-│   └── src/main/java/com/predatorfx/ytdlpweb/
-│       ├── service/                    # YtDlpService, CodecCatalog, JobService,
-│       │                               #   YtDlpUpdateService
-│       ├── web/                        # REST controllers, auth filter
-│       ├── admin/                      # admin panel: admin login, activity records,
-│       │                               #   geo-IP, admin API
-│       └── model/                      # Job, DownloadRequest, AnalyzeResult, …
-└── web/                                # React frontend
-    └── src/{App.jsx, api.js, components/, admin/}
-```
-
-### HTTP API
-
-| Method | Path | Purpose |
-|---|---|---|
-| `POST` | `/api/analyze` | Probe a URL: metadata, formats, playlist items |
-| `GET` | `/api/codecs` | Compression models this host can deliver |
-| `GET` | `/api/playlist/formats` | Whether a playlist's items share resolutions |
-| `POST` | `/api/jobs` | Queue a download (`409` when it would duplicate one) |
-| `GET` | `/api/jobs/{id}` | Job status |
-| `GET` | `/api/jobs/{id}/file` | Download the finished file |
-| `POST` | `/api/jobs/{id}/pause` · `/resume` · `/cancel` | Job control |
-| `GET` | `/api/ytdlp/status` | Version / freshness of yt-dlp |
-| `POST` | `/api/login` | Sign in (team or admin); answers `{ok, admin}` |
-| `GET` | `/api/me` | Session check: `{authenticated, admin}` |
-| `POST` | `/api/telemetry/hello` · `/location` | Device details and the location-consent answer |
-| `GET` | `/api/announcement` | The admin's banner, if any |
-| `GET` | `/api/admin/dashboard` · `/insights` · `/downloads` · `/downloads/export` (CSV) · `/devices/{id}` | Admin panel data (admin session only) |
-| `POST` | `/api/admin/devices/{id}` · `/ips/block` · `/ips/unlock` · `/jobs/{id}/cancel` · `/announcement` | Admin actions, each written to the activity log |
-
----
-
-## Implementation notes
-
-Details that are not obvious from the code, recorded because each cost real debugging
-time:
-
-- **Lossless by default.** The original CLI re-encoded with `h264_nvenc`, which is
-  NVIDIA-only and unavailable on a Mac. Streams are merged instead, which is both
-  faster and lossless.
-- **WEBM needs constrained stream selection.** WEBM can only hold VP8/VP9/AV1 video
-  with Opus/Vorbis audio. A plain "best video + best audio" pick returns AVC1 + M4A,
-  and merging that into `.webm` fails outright — every WEBM download failed until the
-  selection was restricted for that container specifically.
-- **Compression targets bitrate, not quality.** See the compression table above.
-- **SVT-AV1 rejects a rate cap** outside CRF mode and refuses to start, so the cap is
-  applied only to the VideoToolbox encoders.
-- **Thumbnails are matched by aspect.** YouTube serves several per video, and for
-  Shorts the default is a padded 4:3 image; the set is filtered to the video's shape
-  so vertical content doesn't render letterboxed inside a wide frame.
-- **Build output is relocated** to a local disk, because this project can live on a
-  network volume where macOS AppleDouble (`._*`) files break Gradle's cleanup.
-- **Progress is polled, not streamed.** Server-Sent Events are buffered by some
-  reverse proxies, which made progress appear frozen and then jump to complete.
-
----
-
-## Notes on use
-
-- **Internal tool.** Downloading is governed by the source site's terms — use it for
-  content you are permitted to download.
-- **Credentials.** `application.properties` is excluded from version control. Never
-  commit real credentials; rotate them if they are ever exposed.
-- **Exposure.** The app is login-protected, but treat any public tunnel address as
-  sensitive and share it only with the team.
-
----
-
-<sub>Built by PredatorFX</sub>
+<div align="center"><sub>Built by <b>PredatorFX</b> · for the team</sub></div>
