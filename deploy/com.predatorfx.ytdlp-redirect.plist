@@ -16,8 +16,8 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>$HOME/.ytdlp-web/auto-redirect.sh</string>
-        <string>$HOME/.ytdlp-web/redirect-repo</string>
+        <string>-c</string>
+        <string>exec /bin/bash "$HOME/.ytdlp-web/auto-redirect.sh" "$HOME/.ytdlp-web/redirect-repo"</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
