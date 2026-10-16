@@ -96,19 +96,22 @@ export default function DownloadsPanel({ pageId, jobs, onClear, onExpired, onRet
         </p>
       )}
 
-      {jobs.length === 0 ? (
-        <div className="job glass job-empty">
-          <div className="job-empty-icon"><i className="fa-solid fa-cloud-arrow-down" /></div>
-          <div>
-            <div className="job-title">No downloads yet</div>
-            <span className="muted small">Choose your options and hit download — files will appear here.</span>
+      {/* The cards scroll on their own beside the main panel, so the head above stays put. */}
+      <div className="jobs-list">
+        {jobs.length === 0 ? (
+          <div className="job glass job-empty">
+            <div className="job-empty-icon"><i className="fa-solid fa-cloud-arrow-down" /></div>
+            <div>
+              <div className="job-title">No downloads yet</div>
+              <span className="muted small">Choose your options and hit download — files will appear here.</span>
+            </div>
           </div>
-        </div>
-      ) : (
-        jobs.map((j) => (
-          <JobCard key={j.id} job={j} onExpired={onExpired} onRetry={onRetry} autosave={autosave} />
-        ))
-      )}
+        ) : (
+          jobs.map((j) => (
+            <JobCard key={j.id} job={j} onExpired={onExpired} onRetry={onRetry} autosave={autosave} />
+          ))
+        )}
+      </div>
     </section>
   )
 }

@@ -490,6 +490,24 @@ body {
   .workspace { flex-direction: column; }
   .work-main { flex: 1 1 auto; width: 100%; }
 }
+/* Side by side, the downloads column is exactly as tall as the main panel and never taller:
+   its content is taken out of the flow (absolute), so only .work-main sets the row's height,
+   and the cards scroll inside the column under a head that stays put. Left in the flow, every
+   new card made the column longer than the panel and pushed the page down. The 22px bottom
+   matches .panel's margin, so both columns end on the same line. */
+@media (min-width: 1001px) {
+  .workspace { align-items: stretch; }
+  .workspace-side { position: relative; min-height: 420px; }
+  .workspace-side > .jobs { position: absolute; inset: 0 0 22px; display: flex; flex-direction: column; }
+  .workspace-side .jobs-list {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+    padding: 2px 6px 2px 2px; margin-right: -6px; /* room for card borders and the scrollbar */
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  .workspace-side .jobs-list > .job:last-child { margin-bottom: 0; }
+  .workspace-side .jobs-list::-webkit-scrollbar { width: 6px; }
+  .workspace-side .jobs-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+}
 
 /* ---------- Downloads ---------- */
 .dl-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin: 0 2px 12px; }
@@ -947,10 +965,10 @@ body {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: none; }
 }
-.panel, .jobs > .job { animation: ez-rise 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; }
-.jobs > .job:nth-child(2) { animation-delay: 0.03s; }
-.jobs > .job:nth-child(3) { animation-delay: 0.06s; }
-.jobs > .job:nth-child(4) { animation-delay: 0.09s; }
+.panel, .jobs-list > .job { animation: ez-rise 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.jobs-list > .job:nth-child(2) { animation-delay: 0.03s; }
+.jobs-list > .job:nth-child(3) { animation-delay: 0.06s; }
+.jobs-list > .job:nth-child(4) { animation-delay: 0.09s; }
 
 /* A little lift on the things you click, on top of the glass hover already defined. */
 /* Job cards, playlist rows and the panel body are surfaces, not buttons — no lift on
