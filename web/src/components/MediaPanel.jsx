@@ -26,6 +26,8 @@ export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refre
   // a padded thumbnail (e.g. 4:3 for a vertical Short); matching the image means it
   // fills the frame exactly.
   const [imgRatio, setImgRatio] = useState(null)
+  // On tablets and phones a long title is cut to two lines; tapping it shows the rest.
+  const [titleOpen, setTitleOpen] = useState(false)
   const frameRatio = imgRatio || ratio
 
   function measure(e) {
@@ -108,7 +110,13 @@ export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refre
 
       <div className="media-head">
         <div className="media-title-row">
-          <h2 className="title">{analysis.title || 'Untitled'}</h2>
+          <h2
+            className={`title${titleOpen ? ' open' : ''}`}
+            title={analysis.title || undefined}
+            onClick={() => setTitleOpen((o) => !o)}
+          >
+            {analysis.title || 'Untitled'}
+          </h2>
           <CopyLinkButton url={analysis.url} />
         </div>
         <p className="muted">

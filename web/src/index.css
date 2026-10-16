@@ -312,6 +312,17 @@ body {
 .media-top { display: flex; align-items: center; gap: 20px; margin-bottom: 18px; }
 .media-top .hero-wrap { --cap: 190px; flex: 0 0 auto; width: min(44%, calc(var(--cap) * var(--ar))); margin: 0; }
 .media-top .media-head { flex: 1 1 auto; min-width: 0; padding: 0; }
+/* Tablets and phones: next to the smaller thumbnail a long title took over the panel, so it
+   is cut to two lines ending in "…"; tapping it opens the whole title (and closes it again).
+   Wide screens keep the full title, untouched. */
+@media (max-width: 1000px) {
+  .media-top .title {
+    font-size: 16px; overflow-wrap: anywhere; cursor: pointer;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .media-top .title.open { display: block; -webkit-line-clamp: unset; line-clamp: none; overflow: visible; }
+}
 /* Phones: smaller still, beside a slightly smaller title; the resolution badge would
    cover too much of a thumbnail this size, and the quality buttons already say it. */
 @media (max-width: 640px) {
