@@ -505,6 +505,12 @@ body {
     scrollbar-width: thin; scrollbar-color: var(--border) transparent;
   }
   .workspace-side .jobs-list > .job:last-child { margin-bottom: 0; }
+  /* A soft fade at the foot while more cards wait below; gone once the last one is in view.
+     A mask, not an overlay, so it melts into whatever is behind it in either theme. */
+  .workspace-side .jobs-list.more-below {
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 64px), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 64px), transparent);
+  }
   .workspace-side .jobs-list::-webkit-scrollbar { width: 6px; }
   .workspace-side .jobs-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 }

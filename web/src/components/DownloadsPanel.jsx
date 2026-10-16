@@ -1,5 +1,27 @@
+import { useEffect, useRef, useState } from 'react'
 import JobCard from './JobCard'
 import { GRACE_SECONDS } from '../autosave'
+
+/**
+ * Is there more list below what's showing? True only while the cards overflow their box and
+ * the last one isn't in view yet — that's when the bottom fades out.
+ */
+function useMoreBelow(ref) {
+  const [more, setMore] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return undefined
+    const check = () => setMore(el.scrollHeight - el.clientHeight - el.scrollTop > 4)
+    check()
+    el.addEventListener('scroll', check, { passive: true })
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    const mo = new MutationObserver(check) // cards added, removed, or growing as they progress
+    mo.observe(el, { childList: true, subtree: true })
+    return () => { el.removeEventListener('scroll', check); ro.disconnect(); mo.disconnect() }
+  }, [ref])
+  return more
+}
 
 /**
  * The Auto-save switch for THIS link, beside Clear. On: every finished download in the link
@@ -39,6 +61,8 @@ export default function DownloadsPanel({ pageId, jobs, onClear, onExpired, onRet
   const t = autosave.tab(pageId) // this link's Auto-save switch and folder
   const busy = jobs.some((j) => autosave.state[j.id]?.phase === 'saving')
   const locked = autosave.locked
+  const listRef = useRef(null)
+  const moreBelow = useMoreBelow(listRef)
 
   return (
     <section className="jobs">
@@ -97,7 +121,7 @@ export default function DownloadsPanel({ pageId, jobs, onClear, onExpired, onRet
       )}
 
       {/* The cards scroll on their own beside the main panel, so the head above stays put. */}
-      <div className="jobs-list">
+      <div className={`jobs-list${moreBelow ? ' more-below' : ''}`} ref={listRef}>
         {jobs.length === 0 ? (
           <div className="job glass job-empty">
             <div className="job-empty-icon"><i className="fa-solid fa-cloud-arrow-down" /></div>
