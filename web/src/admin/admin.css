@@ -326,11 +326,32 @@ td .chip-row { margin-top: 6px; display: flex; }
 .split-legend li { display: inline-flex; align-items: center; gap: 6px; }
 .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 .top-videos li {
-  display: grid; grid-template-columns: 22px 64px minmax(0, 1fr); gap: 12px; align-items: center;
+  display: grid; grid-template-columns: 30px 64px minmax(0, 1fr); gap: 12px; align-items: center;
   padding: 8px 0; border-bottom: 1px solid var(--border-soft);
 }
 .top-videos li:last-child { border-bottom: 0; }
 .rank { text-align: right; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ---------- Paging ---------- */
+.pager {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-soft);
+}
+.pager-size { display: inline-flex; align-items: center; gap: 8px; }
+.pager .select { padding: 6px 28px 6px 10px; font-size: 13px; border-radius: 8px; }
+.pager-pages { margin-left: auto; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.pager-btn {
+  min-width: 32px; height: 32px; padding: 0 8px; border-radius: 8px;
+  border: 1px solid var(--border-soft); background: var(--glass-bg); color: var(--text);
+  font: inherit; font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.pager-btn i { font-size: 11px; }
+.pager-btn:hover:not(:disabled):not(.active) { background: var(--glass-bg-hover); }
+.pager-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pager-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; cursor: default; }
+.pager-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.pager-gap { min-width: 18px; text-align: center; color: var(--muted); }
 
 /* ---------- Device drawer ---------- */
 .admin .sheet.drawer { width: min(96vw, 580px); }
@@ -365,6 +386,7 @@ td .chip-row { margin-top: 6px; display: flex; }
   .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .kpi-value { font-size: 22px; }
   .toolbar-end { margin-left: 0; }
+  .pager-pages { margin-left: 0; }
   .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .facts dd { margin-bottom: 8px; }
 }

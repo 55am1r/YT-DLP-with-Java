@@ -130,6 +130,36 @@ class AdminReportsTest {
         assertEquals("Ravi", in.topDevices().get(0).label());
     }
 
+    /** The admin pages through these lists, so the server sends every row — not a top ten. */
+    @Test
+    void rankedListsAreNotCutAtTen() {
+        List<DownloadRecord> many = new java.util.ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            DownloadRecord r = dl("j" + i, "dev" + i, NOW - HOUR, "COMPLETED", 1L);
+            r.setUrl("https://youtu.be/video" + String.format("%06d", i)); // 11-character ids
+            many.add(r);
+        }
+
+        AdminReports.Insights in = AdminReports.insights(many, 7, ip -> Optional.empty(), Map.of(), NOW, IST);
+
+        assertEquals(12, in.topVideos().size());
+        assertEquals(12, in.topDevices().size());
+    }
+
+    @Test
+    void pagesComeNewestFirst() {
+        List<Integer> oldestFirst = java.util.stream.IntStream.rangeClosed(1, 25).boxed().toList();
+
+        AdminReports.Page<Integer> first = AdminReports.newestFirstPage(oldestFirst, 0, 10);
+        assertEquals(25, first.total());
+        assertEquals(List.of(25, 24, 23, 22, 21, 20, 19, 18, 17, 16), first.items());
+        assertEquals(List.of(5, 4, 3, 2, 1), AdminReports.newestFirstPage(oldestFirst, 20, 10).items());
+        assertTrue(AdminReports.newestFirstPage(oldestFirst, 99, 10).items().isEmpty());
+        assertEquals(List.of(25), AdminReports.newestFirstPage(oldestFirst, -5, 0).items()); // clamped to 1 row
+        assertEquals(25, AdminReports.newestFirstPage(oldestFirst, 0, 9_999).items().size());
+        assertEquals(0, AdminReports.newestFirstPage(List.of(), 0, 10).total());
+    }
+
     @Test
     void vpnHintWhenOffsetsDiffer() {
         Instant at = Instant.ofEpochMilli(NOW);

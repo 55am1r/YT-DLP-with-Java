@@ -102,10 +102,12 @@ export function ColumnChart({ data, height = 172, format = (v) => v.toLocaleStri
 /**
  * Ranked horizontal bars with the value at the end of each label row.
  * @param items [{ key, label, value, sub, icon, title }]
+ * @param max   the whole list's largest value, when `items` is one page of it — so later pages
+ *              keep the same scale instead of each page's top row filling the track
  */
-export function BarList({ items, format = (v) => v.toLocaleString(), empty = 'Nothing yet' }) {
+export function BarList({ items, format = (v) => v.toLocaleString(), empty = 'Nothing yet', max: overall }) {
   if (!items.length) return <p className="muted small">{empty}</p>
-  const max = Math.max(1, ...items.map((i) => i.value))
+  const max = Math.max(1, overall ?? 0, ...items.map((i) => i.value))
   return (
     <ul className="barlist">
       {items.map((it) => (

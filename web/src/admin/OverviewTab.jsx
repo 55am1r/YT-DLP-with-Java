@@ -4,8 +4,10 @@ import { fmtSpeed } from '../utils'
 import { Chip, DeviceLink, DownloadRow, Empty, Kpi, StatusChip } from './AdminBits'
 import Globe from './Globe'
 import { bytes, compact, EVENT, timeAgo } from './format'
+import Pager from './Pager'
+import { useEventLog } from './useEventLog'
 
-export default function OverviewTab({ data, selectedId, onSelectDevice, onCancelJob, onShowTab }) {
+export default function OverviewTab({ data, tick, selectedId, onSelectDevice, onCancelJob, onShowTab }) {
   const k = data.kpis
   return (
     <>
@@ -39,10 +41,7 @@ export default function OverviewTab({ data, selectedId, onSelectDevice, onCancel
           </div>
           <LiveJobs jobs={data.live} onSelectDevice={onSelectDevice} onCancel={onCancelJob} />
         </section>
-        <section className="panel glass">
-          <div className="panel-head"><h2>Recent activity</h2></div>
-          <ActivityFeed events={data.activity.slice(0, 14)} onSelectDevice={onSelectDevice} />
-        </section>
+        <RecentActivity tick={tick} onSelectDevice={onSelectDevice} />
       </div>
 
       <section className="panel glass">
@@ -55,6 +54,23 @@ export default function OverviewTab({ data, selectedId, onSelectDevice, onCancel
           : <Empty icon="fa-download" title="No downloads yet">They show up here as soon as anyone starts one.</Empty>}
       </section>
     </>
+  )
+}
+
+/** The whole activity log, a page at a time; page 1 keeps up with the dashboard. */
+function RecentActivity({ tick, onSelectDevice }) {
+  const log = useEventLog('all', { id: 'overview-activity', tick })
+  return (
+    <section className="panel glass">
+      <div className="panel-head"><h2>Recent activity</h2></div>
+      {log.error && <div className="error">{log.error}</div>}
+      {!log.loaded ? <p className="muted">Loading…</p> : (
+        <div ref={log.pager.topRef}>
+          <ActivityFeed events={log.items} onSelectDevice={onSelectDevice} />
+        </div>
+      )}
+      <Pager pager={log.pager} noun="events" />
+    </section>
   )
 }
 

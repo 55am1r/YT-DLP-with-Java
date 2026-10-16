@@ -3,9 +3,12 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import { setIpBlocked, unlockIp, updateDevice } from './adminApi'
 import { Chip, DeviceLink, Empty, Kpi } from './AdminBits'
 import { EVENT, fmtDateTime, timeAgo } from './format'
+import Pager from './Pager'
+import { usePaged } from './paging'
+import { useEventLog } from './useEventLog'
 
 /** Wrong logins, lockouts, and what the admin has blocked — with the controls to change it. */
-export default function SecurityTab({ data, onSelectDevice, onChanged }) {
+export default function SecurityTab({ data, tick, onSelectDevice, onChanged }) {
   const [ip, setIp] = useState('')
   const [error, setError] = useState(null)
   const [confirm, setConfirm] = useState(null)
@@ -13,7 +16,13 @@ export default function SecurityTab({ data, onSelectDevice, onChanged }) {
 
   const locked = Object.entries(data.lockedIps || {})
   const blockedDevices = data.devices.filter((d) => d.blocked)
-  const failures = data.security.filter((e) => e.type === 'LOGIN_FAILED' || e.type === 'LOCKED_OUT')
+  const blocked = [
+    ...data.blockedIps.map((b) => ({ key: `ip:${b}`, ip: b })),
+    ...blockedDevices.map((d) => ({ key: `device:${d.id}`, device: d })),
+  ]
+  const [lockedShown, lockedPager] = usePaged(locked, { id: 'security-locked' })
+  const [blockedShown, blockedPager] = usePaged(blocked, { id: 'security-blocked' })
+  const log = useEventLog('security', { id: 'security-log', tick })
 
   async function act(fn) {
     setBusy(true)
@@ -50,15 +59,18 @@ export default function SecurityTab({ data, onSelectDevice, onChanged }) {
         <section className="panel glass">
           <div className="panel-head"><h2>Locked out right now</h2></div>
           {locked.length ? (
-            <ul className="plain-list">
-              {locked.map(([lockedIp, until]) => (
-                <li key={lockedIp}>
-                  <span className="mono">{lockedIp}</span>
-                  <span className="muted small">until {fmtDateTime(until)}</span>
-                  <button type="button" className="link-btn" disabled={busy} onClick={() => act(() => unlockIp(lockedIp))}>Unlock</button>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="plain-list" ref={lockedPager.topRef}>
+                {lockedShown.map(([lockedIp, until]) => (
+                  <li key={lockedIp}>
+                    <span className="mono">{lockedIp}</span>
+                    <span className="muted small">until {fmtDateTime(until)}</span>
+                    <button type="button" className="link-btn" disabled={busy} onClick={() => act(() => unlockIp(lockedIp))}>Unlock</button>
+                  </li>
+                ))}
+              </ul>
+              <Pager pager={lockedPager} noun="addresses" />
+            </>
           ) : <Empty icon="fa-lock-open" title="Nobody is locked out" />}
         </section>
 
@@ -72,23 +84,25 @@ export default function SecurityTab({ data, onSelectDevice, onChanged }) {
             </button>
           </form>
           <p className="muted small">Blocking an IP turns away everyone behind it — on a shared office network, that’s everyone there.</p>
-          {data.blockedIps.length || blockedDevices.length ? (
-            <ul className="plain-list">
-              {data.blockedIps.map((b) => (
-                <li key={b}>
-                  <Chip tone="critical" icon="fa-network-wired">IP</Chip>
-                  <span className="mono">{b}</span>
-                  <button type="button" className="link-btn" disabled={busy} onClick={() => act(() => setIpBlocked(b, false))}>Unblock</button>
-                </li>
-              ))}
-              {blockedDevices.map((d) => (
-                <li key={d.id}>
-                  <Chip tone="critical" icon="fa-ban">Device</Chip>
-                  <DeviceLink id={d.id} name={d.name} onSelect={onSelectDevice} />
-                  <button type="button" className="link-btn" disabled={busy} onClick={() => act(() => updateDevice(d.id, { blocked: false }))}>Unblock</button>
-                </li>
-              ))}
-            </ul>
+          {blocked.length ? (
+            <>
+              <ul className="plain-list" ref={blockedPager.topRef}>
+                {blockedShown.map((b) => (b.ip ? (
+                  <li key={b.key}>
+                    <Chip tone="critical" icon="fa-network-wired">IP</Chip>
+                    <span className="mono">{b.ip}</span>
+                    <button type="button" className="link-btn" disabled={busy} onClick={() => act(() => setIpBlocked(b.ip, false))}>Unblock</button>
+                  </li>
+                ) : (
+                  <li key={b.key}>
+                    <Chip tone="critical" icon="fa-ban">Device</Chip>
+                    <DeviceLink id={b.device.id} name={b.device.name} onSelect={onSelectDevice} />
+                    <button type="button" className="link-btn" disabled={busy} onClick={() => act(() => updateDevice(b.device.id, { blocked: false }))}>Unblock</button>
+                  </li>
+                )))}
+              </ul>
+              <Pager pager={blockedPager} noun="blocks" />
+            </>
           ) : <Empty icon="fa-circle-check" title="Nothing is blocked" />}
         </section>
       </div>
@@ -96,16 +110,20 @@ export default function SecurityTab({ data, onSelectDevice, onChanged }) {
       <section className="panel glass">
         <div className="panel-head">
           <h2>Security log</h2>
-          <span className="muted small">{failures.length ? `${failures.length} wrong logins or lockouts listed` : ''}</span>
+          <span className="muted small">
+            {log.total ? `${log.total.toLocaleString()} ${log.total === 1 ? 'entry' : 'entries'} — wrong logins, lockouts, admin sign-ins and admin actions` : ''}
+          </span>
         </div>
-        {data.security.length ? (
-          <div className="table-wrap">
+        {log.error && <div className="error">{log.error}</div>}
+        {!log.loaded ? <p className="muted">Loading…</p> : log.items.length ? (
+          <>
+          <div className="table-wrap" ref={log.pager.topRef}>
             <table className="admin-table">
               <thead>
                 <tr><th>When</th><th>What</th><th>Who</th><th>From</th><th>Details</th></tr>
               </thead>
               <tbody>
-                {data.security.map((e, i) => {
+                {log.items.map((e, i) => {
                   const m = EVENT[e.type] || { label: e.type, icon: 'fa-circle', tone: 'muted' }
                   return (
                     <tr key={`${e.at}-${i}`}>
@@ -124,6 +142,8 @@ export default function SecurityTab({ data, onSelectDevice, onChanged }) {
               </tbody>
             </table>
           </div>
+          <Pager pager={log.pager} noun={log.total === 1 ? 'entry' : 'entries'} />
+          </>
         ) : <Empty icon="fa-shield-halved" title="Nothing to report" />}
       </section>
 

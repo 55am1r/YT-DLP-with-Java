@@ -4,8 +4,11 @@ import { getDevice, setIpBlocked, updateDevice } from './adminApi'
 import { Chip, DownloadRow, Empty } from './AdminBits'
 import { ActivityFeed } from './OverviewTab'
 import { bytes, CONSENT, deviceIcon, fmtDateTime, gmapsLink, osmLink, timeAgo, VIA } from './format'
+import Pager from './Pager'
+import { usePaged } from './paging'
 
 const SLIDE_OUT_MS = 560
+const NONE = []
 
 /** Everything about one device, slid in from the right. Refreshes itself every 10 s. */
 export default function DeviceDrawer({ id, you, onClose, onChanged }) {
@@ -67,6 +70,10 @@ export default function DeviceDrawer({ id, you, onClose, onChanged }) {
 
   const d = detail?.device
   const consent = d && (CONSENT[d.consent] || CONSENT.unknown)
+  const ips = d ? [...d.ips].sort((a, b) => b.lastSeen - a.lastSeen) : NONE
+  const [ipsShown, ipPager] = usePaged(ips, { id: 'drawer-ips' })
+  const [downloadsShown, downloadPager] = usePaged(detail?.downloads ?? NONE, { id: 'drawer-downloads' })
+  const [eventsShown, eventPager] = usePaged(detail?.events ?? NONE, { id: 'drawer-activity' })
 
   return (
     <>
@@ -174,13 +181,13 @@ export default function DeviceDrawer({ id, you, onClose, onChanged }) {
                 </dl>
 
                 <h4 className="section-title">Networks used</h4>
-                <div className="table-wrap">
+                <div className="table-wrap" ref={ipPager.topRef}>
                   <table className="admin-table compact">
                     <thead>
                       <tr><th>IP address</th><th>Route</th><th>Last used</th><th className="num">Requests</th><th aria-label="Actions" /></tr>
                     </thead>
                     <tbody>
-                      {[...d.ips].sort((a, b) => b.lastSeen - a.lastSeen).map((ip) => (
+                      {ipsShown.map((ip) => (
                         <tr key={ip.ip}>
                           <td className="mono">{ip.ip}</td>
                           <td className="muted">{ip.ip === d.ip ? (VIA[d.via] || d.via) : ''}</td>
@@ -198,14 +205,23 @@ export default function DeviceDrawer({ id, you, onClose, onChanged }) {
                     </tbody>
                   </table>
                 </div>
+                <Pager pager={ipPager} noun="addresses" />
 
                 <h4 className="section-title">Downloads ({detail.downloads.length})</h4>
-                {detail.downloads.length
-                  ? <ul className="dl-list">{detail.downloads.map((r) => <DownloadRow key={r.jobId} r={r} showDevice={false} onSelectDevice={() => {}} />)}</ul>
-                  : <Empty icon="fa-download" title="Nothing downloaded yet" />}
+                {detail.downloads.length ? (
+                  <>
+                    <ul className="dl-list" ref={downloadPager.topRef}>
+                      {downloadsShown.map((r) => <DownloadRow key={r.jobId} r={r} showDevice={false} onSelectDevice={() => {}} />)}
+                    </ul>
+                    <Pager pager={downloadPager} noun="downloads" />
+                  </>
+                ) : <Empty icon="fa-download" title="Nothing downloaded yet" />}
 
                 <h4 className="section-title">Activity</h4>
-                <ActivityFeed events={detail.events.slice(0, 40)} onSelectDevice={() => {}} />
+                <div ref={eventPager.topRef}>
+                  <ActivityFeed events={eventsShown} onSelectDevice={() => {}} />
+                </div>
+                <Pager pager={eventPager} noun="events" />
 
                 {d.id !== you && (
                   <div className="drawer-actions">

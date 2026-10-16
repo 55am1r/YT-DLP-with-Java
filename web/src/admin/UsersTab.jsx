@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Chip, Empty } from './AdminBits'
 import { bytes, deviceIcon, SOURCE, timeAgo, VIA } from './format'
+import Pager from './Pager'
+import { usePaged } from './paging'
 
 const SHOW = [
   { id: 'all', label: 'All', test: () => true },
@@ -28,6 +30,7 @@ export default function UsersTab({ devices, you, onSelectDevice }) {
     .filter((d) => !needle || [d.name, d.label, d.ip, d.place?.label, d.ipGeo?.isp]
       .some((v) => v && v.toLowerCase().includes(needle)))
     .sort(SORTS[sort])
+  const [shown, pager] = usePaged(rows, { id: 'users', resetKey: `${needle}|${show}|${sort}` })
 
   return (
     <section className="panel glass">
@@ -55,7 +58,8 @@ export default function UsersTab({ devices, you, onSelectDevice }) {
       </div>
 
       {rows.length ? (
-        <div className="table-wrap">
+        <>
+        <div className="table-wrap" ref={pager.topRef}>
           <table className="admin-table">
             <thead>
               <tr>
@@ -69,7 +73,7 @@ export default function UsersTab({ devices, you, onSelectDevice }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((d) => (
+              {shown.map((d) => (
                 <tr key={d.id} className="clickable" onClick={() => onSelectDevice(d.id)}>
                   <td>
                     <button type="button" className="row-main" onClick={(e) => { e.stopPropagation(); onSelectDevice(d.id) }}>
@@ -118,6 +122,8 @@ export default function UsersTab({ devices, you, onSelectDevice }) {
             </tbody>
           </table>
         </div>
+        <Pager pager={pager} noun={rows.length === 1 ? 'device' : 'devices'} />
+        </>
       ) : (
         <Empty icon="fa-users" title={devices.length ? 'No devices match' : 'No devices yet'}>
           {devices.length ? 'Try another search or filter.' : 'Every browser that signs in shows up here.'}

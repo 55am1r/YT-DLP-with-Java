@@ -127,12 +127,12 @@ export default function AdminPanel({ theme, onToggleTheme, onOpenApp, onLogout, 
         {!data ? <div className="loading muted">Loading the dashboard…</div> : (
           <main role="tabpanel" aria-label={TABS.find((t) => t.id === tab).label}>
             {tab === 'overview' && (
-              <OverviewTab data={data} selectedId={deviceId} onSelectDevice={setDeviceId} onCancelJob={cancel} onShowTab={pick} />
+              <OverviewTab data={data} tick={updatedAt} selectedId={deviceId} onSelectDevice={setDeviceId} onCancelJob={cancel} onShowTab={pick} />
             )}
             {tab === 'users' && <UsersTab devices={data.devices} you={data.you} onSelectDevice={setDeviceId} />}
             {tab === 'downloads' && <DownloadsTab devices={data.devices} onSelectDevice={setDeviceId} />}
             {tab === 'insights' && <InsightsTab onSelectDevice={setDeviceId} />}
-            {tab === 'security' && <SecurityTab data={data} onSelectDevice={setDeviceId} onChanged={load} />}
+            {tab === 'security' && <SecurityTab data={data} tick={updatedAt} onSelectDevice={setDeviceId} onChanged={load} />}
             {tab === 'system' && <SystemTab data={data} onChanged={load} />}
           </main>
         )}

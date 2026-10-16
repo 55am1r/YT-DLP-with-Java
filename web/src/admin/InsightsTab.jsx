@@ -3,9 +3,13 @@ import { getInsights } from './adminApi'
 import { BarList, ColumnChart, SplitBar } from './charts'
 import { DeviceLink, Empty } from './AdminBits'
 import { bytes, fmtDay, safeHref, statusMeta, ytThumb } from './format'
+import Pager from './Pager'
+import { usePaged } from './paging'
 
 const PERIODS = [7, 30, 90]
 const QUALITY_ORDER = ['2160p', '1440p', '1080p', '720p', '480p or less']
+const NONE = []
+const topCount = (list) => Math.max(1, ...list.map((t) => t.count))
 
 /** What the team downloads, when, and from where — for the chosen period. */
 export default function InsightsTab({ onSelectDevice }) {
@@ -23,6 +27,9 @@ export default function InsightsTab({ onSelectDevice }) {
   }, [days])
 
   const total = data ? data.perDay.reduce((s, d) => s + d.downloads, 0) : 0
+  const [videos, videoPager] = usePaged(data?.topVideos ?? NONE, { id: 'insights-videos', resetKey: days })
+  const [places, placePager] = usePaged(data?.topPlaces ?? NONE, { id: 'insights-places', resetKey: days })
+  const [people, peoplePager] = usePaged(data?.topDevices ?? NONE, { id: 'insights-devices', resetKey: days })
 
   return (
     <>
@@ -51,6 +58,7 @@ export default function InsightsTab({ onSelectDevice }) {
             <div className="panel-head"><h2>Downloads per day</h2></div>
             {tables ? (
               <SimpleTable
+                id="insights-days" resetKey={days} noun="days"
                 head={['Day', 'Downloads', 'Devices', 'Delivered']}
                 rows={data.perDay.map((d) => [fmtDay(d.day), d.downloads, d.devices, bytes(d.bytes)])}
               />
@@ -72,7 +80,7 @@ export default function InsightsTab({ onSelectDevice }) {
                 <span className="muted small">server time</span>
               </div>
               {tables ? (
-                <SimpleTable head={['Hour', 'Downloads started']}
+                <SimpleTable id="insights-hours" resetKey={days} noun="hours" head={['Hour', 'Downloads started']}
                   rows={data.perHour.map((n, h) => [`${String(h).padStart(2, '0')}:00`, n])} />
               ) : (
                 <ColumnChart
@@ -97,13 +105,13 @@ export default function InsightsTab({ onSelectDevice }) {
 
           <section className="panel glass">
             <div className="panel-head"><h2>Most downloaded</h2></div>
-            <ol className="top-videos">
-              {data.topVideos.map((v, i) => {
+            <ol className="top-videos" ref={videoPager.topRef}>
+              {videos.map((v, i) => {
                 const href = safeHref(v.extra)
                 const thumb = /^[A-Za-z0-9_-]{11}$/.test(v.key) ? ytThumb(v.key) : null
                 return (
                   <li key={v.key}>
-                    <span className="rank">{i + 1}</span>
+                    <span className="rank">{videoPager.offset + i + 1}</span>
                     <div className="dl-thumb" aria-hidden="true">
                       {thumb ? <img src={thumb} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <i className="fa-solid fa-film" />}
                     </div>
@@ -119,21 +127,28 @@ export default function InsightsTab({ onSelectDevice }) {
                 )
               })}
             </ol>
+            <Pager pager={videoPager} noun="videos" />
           </section>
 
           <div className="admin-cols three">
             <section className="panel glass">
               <div className="panel-head"><h2>Where from</h2></div>
-              <BarList items={data.topPlaces.map((p) => ({
-                key: p.key, label: p.label, value: p.count, sub: `${p.devices} ${p.devices === 1 ? 'device' : 'devices'}`,
-              }))} />
+              <div ref={placePager.topRef}>
+                <BarList max={topCount(data.topPlaces)} items={places.map((p) => ({
+                  key: p.key, label: p.label, value: p.count, sub: `${p.devices} ${p.devices === 1 ? 'device' : 'devices'}`,
+                }))} />
+              </div>
+              <Pager pager={placePager} noun="places" />
             </section>
             <section className="panel glass">
               <div className="panel-head"><h2>Most active devices</h2></div>
-              <BarList items={data.topDevices.map((p) => ({
-                key: p.key, value: p.count,
-                label: <DeviceLink id={p.key === '?' ? null : p.key} name={p.label} onSelect={onSelectDevice} />,
-              }))} />
+              <div ref={peoplePager.topRef}>
+                <BarList max={topCount(data.topDevices)} items={people.map((p) => ({
+                  key: p.key, value: p.count,
+                  label: <DeviceLink id={p.key === '?' ? null : p.key} name={p.label} onSelect={onSelectDevice} />,
+                }))} />
+              </div>
+              <Pager pager={peoplePager} noun="devices" />
             </section>
             <section className="panel glass">
               <div className="panel-head"><h2>Formats & results</h2></div>
@@ -152,17 +167,21 @@ export default function InsightsTab({ onSelectDevice }) {
   )
 }
 
-function SimpleTable({ head, rows }) {
+function SimpleTable({ id, resetKey, noun, head, rows }) {
+  const [shown, pager] = usePaged(rows, { id, resetKey })
   return (
-    <div className="table-wrap">
-      <table className="admin-table compact">
-        <thead><tr>{head.map((h, i) => <th key={h} className={i ? 'num' : ''}>{h}</th>)}</tr></thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r[0]}>{r.map((c, i) => <td key={i} className={i ? 'num' : ''}>{typeof c === 'number' ? c.toLocaleString() : c}</td>)}</tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <>
+      <div className="table-wrap" ref={pager.topRef}>
+        <table className="admin-table compact">
+          <thead><tr>{head.map((h, i) => <th key={h} className={i ? 'num' : ''}>{h}</th>)}</tr></thead>
+          <tbody>
+            {shown.map((r) => (
+              <tr key={r[0]}>{r.map((c, i) => <td key={i} className={i ? 'num' : ''}>{typeof c === 'number' ? c.toLocaleString() : c}</td>)}</tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Pager pager={pager} noun={noun} />
+    </>
   )
 }

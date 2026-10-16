@@ -297,6 +297,33 @@ class AdminAccessTest {
     }
 
     @Test
+    void eventLogPagesNewestFirstForTheAdminOnly() throws Exception {
+        mvc.perform(get("/api/admin/events").with(from("203.0.113.40"))).andExpect(status().isUnauthorized());
+        MvcResult team = login("team", "team-pass", "203.0.113.40");
+        mvc.perform(get("/api/admin/events").with(from("203.0.113.40")).cookie(team.getResponse().getCookies()))
+                .andExpect(status().isUnauthorized());
+
+        login("team", "wrong-guess", "203.0.113.41");
+        MvcResult admin = login("TestAdmin", "S3cret-pass!", "203.0.113.41");
+        Cookie[] c = admin.getResponse().getCookies();
+
+        mvc.perform(get("/api/admin/events?kind=security&limit=1").with(from("203.0.113.41")).cookie(c))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].type").value(ActivityEvent.ADMIN_LOGIN))
+                .andExpect(jsonPath("$.total").value(org.hamcrest.Matchers.greaterThanOrEqualTo(2)));
+        mvc.perform(get("/api/admin/events?kind=security&offset=1&limit=50").with(from("203.0.113.41")).cookie(c))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[*].type", org.hamcrest.Matchers.everyItem(org.hamcrest.Matchers.in(
+                        List.of(ActivityEvent.LOGIN_FAILED, ActivityEvent.LOCKED_OUT, ActivityEvent.ADMIN_LOGIN,
+                                ActivityEvent.ADMIN_ACTION)))))
+                .andExpect(jsonPath("$.items[?(@.type == 'LOGIN_FAILED' && @.ip == '203.0.113.41')]").isNotEmpty());
+        mvc.perform(get("/api/admin/events?limit=2").with(from("203.0.113.41")).cookie(c))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(2));
+    }
+
+    @Test
     void adminCannotBlockOwnDeviceOrIp() throws Exception {
         MvcResult r = login("TestAdmin", "S3cret-pass!", "203.0.113.16");
         Cookie[] c = r.getResponse().getCookies();

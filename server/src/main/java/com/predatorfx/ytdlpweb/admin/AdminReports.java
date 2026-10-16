@@ -220,6 +220,15 @@ public class AdminReports {
         return new Page<>(hits.size(), hits.subList(from, to).stream().map(r -> view(r, byId)).toList());
     }
 
+    /** The activity log a page at a time, newest first — every event, or only the security ones. */
+    public Page<EventView> events(boolean securityOnly, int offset, int limit) {
+        List<ActivityEvent> all = activity.events();
+        Page<ActivityEvent> page = newestFirstPage(
+                securityOnly ? all.stream().filter(e -> SECURITY_EVENTS.contains(e.type())).toList() : all, offset, limit);
+        Map<String, DeviceRecord> byId = byId(activity.devices());
+        return new Page<>(page.total(), page.items().stream().map(e -> view(e, byId)).toList());
+    }
+
     public String csv(DownloadFilter filter) {
         Map<String, DeviceRecord> byId = byId(activity.devices());
         return AdminCsv.downloads(filtered(filter), id -> name(byId.get(id)), this::placeOf, ZoneId.systemDefault());
@@ -372,7 +381,7 @@ public class AdminReports {
                 top(people));
     }
 
-    /** One row of a top-10 list, filled as downloads are counted. */
+    /** One row of a ranked list, filled as downloads are counted. */
     private static final class Tally {
         final String key;
         String label;
@@ -402,12 +411,12 @@ public class AdminReports {
         }
     }
 
+    /** Every row, ranked — the panel pages through them, so nothing is cut off here. */
     private static List<TopItem> top(Map<String, Tally> tallies) {
         return tallies.values().stream()
                 .map(Tally::item)
                 .sorted(Comparator.comparingInt(TopItem::count).reversed()
                         .thenComparing(TopItem::label, Comparator.nullsLast(Comparator.naturalOrder())))
-                .limit(10)
                 .toList();
     }
 
@@ -487,6 +496,18 @@ public class AdminReports {
 
     private static long startOfDay(long now, ZoneId zone) {
         return Instant.ofEpochMilli(now).atZone(zone).toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli();
+    }
+
+    /** Rows {@code offset}.. of an oldest-first list, read newest first; a page holds 1 to 500 rows. */
+    static <T> Page<T> newestFirstPage(List<T> oldestFirst, int offset, int limit) {
+        int size = oldestFirst.size();
+        int from = Math.max(0, Math.min(offset, size));
+        int to = Math.min(size, from + Math.max(1, Math.min(limit, 500)));
+        List<T> items = new ArrayList<>(to - from);
+        for (int i = from; i < to; i++) {
+            items.add(oldestFirst.get(size - 1 - i));
+        }
+        return new Page<>(size, items);
     }
 
     private static <T> List<T> newestFirst(List<T> oldestFirst, int max) {

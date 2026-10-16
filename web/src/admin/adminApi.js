@@ -31,6 +31,8 @@ export const getDevice = (id) => get(`/api/admin/devices/${encodeURIComponent(id
 export const getDownloads = (filters, offset = 0, limit = 50) =>
   get(`/api/admin/downloads?${query({ ...filters, offset, limit })}`)
 export const downloadsCsvUrl = (filters) => `/api/admin/downloads/export?${query(filters)}`
+/** A page of the activity log, newest first. kind: 'all' or 'security'. */
+export const getEvents = (kind, offset = 0, limit = 50) => get(`/api/admin/events?${query({ kind, offset, limit })}`)
 
 export const updateDevice = (id, patch) => post(`/api/admin/devices/${encodeURIComponent(id)}`, patch)
 export const setIpBlocked = (ip, blocked) => post('/api/admin/ips/block', { ip, blocked })

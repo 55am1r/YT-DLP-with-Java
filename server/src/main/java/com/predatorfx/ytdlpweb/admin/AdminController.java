@@ -72,6 +72,14 @@ public class AdminController {
         return reports.downloads(new AdminReports.DownloadFilter(q, device, status, kind, days), offset, limit);
     }
 
+    /** The activity log a page at a time, newest first. kind=security keeps logins, lockouts and admin actions. */
+    @GetMapping("/events")
+    public AdminReports.Page<AdminReports.EventView> events(
+            @RequestParam(defaultValue = "all") String kind, @RequestParam(defaultValue = "0") int offset,
+            @RequestParam(defaultValue = "50") int limit) {
+        return reports.events("security".equalsIgnoreCase(kind), offset, limit);
+    }
+
     /**
      * The same log as a spreadsheet (with a BOM so Excel reads Telugu and Hindi titles right).
      * No ".csv" in the path: Cloudflare caches some file extensions by default.

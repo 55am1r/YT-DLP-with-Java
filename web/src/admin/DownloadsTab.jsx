@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { downloadsCsvUrl, getDownloads } from './adminApi'
 import { DownloadRow, Empty } from './AdminBits'
+import Pager from './Pager'
+import { usePager } from './paging'
 
 const STATUSES = [
   { v: '', label: 'Any result' },
@@ -11,9 +13,8 @@ const STATUSES = [
 ]
 const KINDS = [{ v: '', label: 'Audio & video' }, { v: 'audio', label: 'Audio' }, { v: 'video', label: 'Video' }]
 const PERIODS = [{ v: 0, label: 'All time' }, { v: 1, label: '24 hours' }, { v: 7, label: '7 days' }, { v: 30, label: '30 days' }]
-const PAGE = 50
 
-/** The complete download log, filterable, with a CSV export of whatever is filtered. */
+/** The complete download log, filterable and paged, with a CSV export of whatever is filtered. */
 export default function DownloadsTab({ devices, onSelectDevice }) {
   const [text, setText] = useState('')
   const [q, setQ] = useState('')
@@ -31,24 +32,20 @@ export default function DownloadsTab({ devices, onSelectDevice }) {
     return () => clearTimeout(t)
   }, [text])
 
+  const filterKey = JSON.stringify({ q, status, kind, days, device })
+  const pager = usePager(page.total, { id: 'downloads', resetKey: filterKey })
+
   useEffect(() => {
     let alive = true
     setLoading(true)
-    getDownloads({ q, status, kind, days, device }, 0, PAGE)
+    getDownloads({ q, status, kind, days, device }, pager.offset, pager.size)
       .then((p) => { if (alive) { setPage(p); setError(null) } })
       .catch((e) => { if (alive) setError(e.message || 'Could not load downloads') })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-  }, [q, status, kind, days, device, refresh])
-
-  async function more() {
-    try {
-      const p = await getDownloads({ q, status, kind, days, device }, page.items.length, PAGE)
-      setPage((prev) => ({ total: p.total, items: [...prev.items, ...p.items] }))
-    } catch (e) {
-      setError(e.message || 'Could not load more')
-    }
-  }
+    // filterKey stands for the five filters it is built from
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey, pager.offset, pager.size, refresh])
 
   const named = [...devices].sort((a, b) => a.name.localeCompare(b.name))
 
@@ -87,7 +84,7 @@ export default function DownloadsTab({ devices, onSelectDevice }) {
         {loading ? 'Loading…' : `${page.total.toLocaleString()} ${page.total === 1 ? 'download' : 'downloads'}`}
       </p>
 
-      <div className={loading ? 'refetching' : ''}>
+      <div className={loading ? 'refetching' : ''} ref={pager.topRef}>
         {page.items.length ? (
           <ul className="dl-list">
             {page.items.map((r) => <DownloadRow key={r.jobId} r={r} onSelectDevice={onSelectDevice} />)}
@@ -97,13 +94,7 @@ export default function DownloadsTab({ devices, onSelectDevice }) {
         )}
       </div>
 
-      {page.items.length < page.total && (
-        <div className="center">
-          <button type="button" className="btn btn-sm" onClick={more}>
-            Show {Math.min(PAGE, page.total - page.items.length)} more
-          </button>
-        </div>
-      )}
+      <Pager pager={pager} noun={page.total === 1 ? 'download' : 'downloads'} />
     </section>
   )
 }
