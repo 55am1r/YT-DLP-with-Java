@@ -49,6 +49,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "app.auth.enabled=true",
         "app.auth.username=team",
         "app.auth.password=team-pass",
+        "app.footer.match=ea",
+        "app.footer.text=by Test · for the Test Team",
         // TestAdmin / S3cret-pass! — a made-up credential, see AdminCredentialTest
         "app.admin.credential=pbkdf2-sha256$1000$AAECAwQFBgcICQoLDA0ODw==$qKL6v25LIKaeMqK085jq/7ywj5yWduUhyJJ8M8bqrjM="
 })
@@ -133,6 +135,15 @@ class AdminAccessTest {
         int gate = mvc.perform(get("/api/admin/dashboard").with(from("203.0.113.3")).cookie(c))
                 .andReturn().getResponse().getStatus();
         assertNotEquals(401, gate);
+    }
+
+    @Test
+    void matchingTeamLoginGetsTheConfiguredFooter() throws Exception {
+        mvc.perform(get("/api/me").with(from("203.0.113.42"))).andExpect(jsonPath("$.footer").doesNotExist());
+        MvcResult r = login("team", "team-pass", "203.0.113.42");
+        assertTrue(r.getResponse().getContentAsString().contains("\"footer\":\"by Test · for the Test Team\""));
+        mvc.perform(get("/api/me").with(from("203.0.113.42")).cookie(r.getResponse().getCookies()))
+                .andExpect(jsonPath("$.footer").value("by Test · for the Test Team"));
     }
 
     @Test

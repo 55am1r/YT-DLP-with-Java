@@ -19,6 +19,12 @@ app.auth.enabled=true
 app.auth.username=team
 app.auth.password=CHANGE_ME
 
+# --- Optional footer for one login: when the signed-in username contains app.footer.match,
+# the downloader's footer reads app.footer.text instead of "by PredatorFX". Keep the real
+# values here only — this file is private, and the site's code is public. ---
+#app.footer.match=
+#app.footer.text=
+
 # --- Admin panel: the owner signs in on the same login screen with their own credentials ---
 # Only a salted hash is stored here — never the plaintext. Generate the line with:
 #   python3 -c 'import hashlib,os,base64,getpass;u=input("Admin username: ");p=getpass.getpass("Admin password: ");s=os.urandom(16);n=600000;h=hashlib.pbkdf2_hmac("sha256",(u+"\n"+p).encode(),s,n);print("app.admin.credential=pbkdf2-sha256$%d$%s$%s"%(n,base64.b64encode(s).decode(),base64.b64encode(h).decode()))'

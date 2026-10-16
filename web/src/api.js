@@ -28,7 +28,7 @@ export async function checkAuth() {
   if (res.status === 403) return { authenticated: false, admin: false, blocked: true }
   if (!res.ok) return { authenticated: false, admin: false, blocked: false }
   const body = await res.json().catch(() => ({}))
-  return { authenticated: true, admin: !!body.admin, blocked: false }
+  return { authenticated: true, admin: !!body.admin, blocked: false, footer: body.footer || null }
 }
 
 /** The same form signs in the team and the admin; `admin` says which one it was. */
@@ -40,7 +40,7 @@ export async function login(username, password) {
   })
   if (!res.ok) throw await toError(res)
   const body = await res.json().catch(() => ({}))
-  return { ok: true, admin: !!body.admin }
+  return { ok: true, admin: !!body.admin, footer: body.footer || null }
 }
 
 // ---- device info for the admin panel (best effort: never blocks the app) ----

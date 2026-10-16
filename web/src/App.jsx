@@ -58,6 +58,7 @@ export default function App() {
   const [view, setView] = useState('app')        // an admin can switch between 'admin' and 'app'
   const [blocked, setBlocked] = useState(false)  // the admin has turned this device/IP away
   const [loginNote, setLoginNote] = useState(null)
+  const [footer, setFooter] = useState(null)     // the server's footer for this login, if it has one
   const [theme, setTheme] = useState(() => localStorage.getItem('ez-theme') || 'dark')
   const restored = useRef(loadSession())
   const [pages, setPages] = useState(restored.current.pages)
@@ -101,6 +102,7 @@ export default function App() {
       .then((s) => {
         setBlocked(s.blocked)
         setIsAdmin(s.admin)
+        setFooter(s.footer)
         setView(viewFor(s))
         setAuthed(s.authenticated)
       })
@@ -386,6 +388,7 @@ export default function App() {
     setPages([])
     setActiveId(null)
     setIsAdmin(false)
+    setFooter(null)
     setView('app')
     setAuthed(false)
   }
@@ -415,6 +418,7 @@ export default function App() {
     setBlocked(false)
     setLoginNote(null)
     setIsAdmin(result.admin)
+    setFooter(result.footer)
     setView(result.admin ? 'admin' : 'app')
     setAuthed(true)
   }
@@ -638,7 +642,7 @@ export default function App() {
       {active && <ScrollFab />}
 
       <footer className="foot muted">
-        by PredatorFX
+        {footer || 'by PredatorFX'}
       </footer>
     </div>
   )

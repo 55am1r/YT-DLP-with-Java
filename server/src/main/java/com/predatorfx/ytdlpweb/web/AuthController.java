@@ -7,6 +7,7 @@ import com.predatorfx.ytdlpweb.admin.AdminAuthService;
 import com.predatorfx.ytdlpweb.admin.ClientInfo;
 import com.predatorfx.ytdlpweb.admin.LoginGuard;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -33,6 +35,13 @@ public class AuthController {
     private final LoginGuard guard;
     private final ActivityService activity;
 
+    /** The footer for a signed-in username containing this text. Both live only in application.properties. */
+    @Value("${app.footer.match:}")
+    private String footerMatch;
+
+    @Value("${app.footer.text:}")
+    private String footerText;
+
     public AuthController(AuthService auth, AdminAuthService admin, LoginGuard guard, ActivityService activity) {
         this.auth = auth;
         this.admin = admin;
@@ -42,12 +51,30 @@ public class AuthController {
 
     public record LoginRequest(String username, String password) {}
 
+    /** The configured footer if {@code username} contains the configured match, else null (the default footer). */
+    static String footerFor(String username, String match, String text) {
+        if (username == null || match == null || match.isBlank() || text == null || text.isBlank()) {
+            return null;
+        }
+        return username.contains(match.trim()) ? text.trim() : null;
+    }
+
+    /** A signed-in answer, with the custom footer only when it applies — never sent before sign-in. */
+    private Map<String, Object> signedIn(Map<String, Object> body) {
+        Map<String, Object> out = new LinkedHashMap<>(body);
+        String footer = footerFor(auth.username(), footerMatch, footerText);
+        if (footer != null) {
+            out.put("footer", footer);
+        }
+        return out;
+    }
+
     /** Used by the UI on load to decide between the app, the admin panel and the login screen. */
     @GetMapping("/me")
     public ResponseEntity<?> me(HttpServletRequest req) {
         boolean isAdmin = admin.validSession(req);
         if (isAdmin || auth.validCookie(req)) {
-            return ResponseEntity.ok(Map.of("authenticated", true, "username", auth.username(), "admin", isAdmin));
+            return ResponseEntity.ok(signedIn(Map.of("authenticated", true, "username", auth.username(), "admin", isAdmin)));
         }
         return ResponseEntity.status(401).body(Map.of("authenticated", false));
     }
@@ -78,7 +105,7 @@ public class AuthController {
             activity.recordEvent(ActivityEvent.LOGIN, device, client.ip(), null, null, null);
             return ResponseEntity.ok()
                     .header(HttpHeaders.SET_COOKIE, auth.sessionCookie().toString())
-                    .body(Map.of("ok", true, "admin", false));
+                    .body(signedIn(Map.of("ok", true, "admin", false)));
         }
         AdminAuthService.Check check = admin.check(user, pass);
         if (check == AdminAuthService.Check.BUSY) {
@@ -92,7 +119,7 @@ public class AuthController {
             return ResponseEntity.ok()
                     .header(HttpHeaders.SET_COOKIE, admin.sessionCookie(admin.startSession()).toString())
                     .header(HttpHeaders.SET_COOKIE, auth.sessionCookie().toString())
-                    .body(Map.of("ok", true, "admin", true));
+                    .body(signedIn(Map.of("ok", true, "admin", true)));
         }
 
         // Nothing typed is stored — only that a wrong login came from here.
