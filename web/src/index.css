@@ -305,6 +305,15 @@ body {
 }
 .hero-empty { display: grid; place-items: center; width: 100%; height: 100%; font-size: 40px; color: var(--muted); }
 .media-head { padding: 14px 2px 4px; }
+/* Wide screens: a compact thumbnail beside the title, so the format choices and the
+   Download button share one screen with it instead of sitting below the fold. The frame
+   keeps the video's own shape — at most 190px tall and 44% of the panel wide — and the
+   downloads column, which follows the panel's height, shrinks with it. */
+@media (min-width: 1001px) {
+  .media-top { display: flex; align-items: center; gap: 20px; margin-bottom: 18px; }
+  .media-top .hero-wrap { --cap: 190px; flex: 0 0 auto; width: min(44%, calc(var(--cap) * var(--ar))); margin: 0; }
+  .media-top .media-head { flex: 1 1 auto; min-width: 0; padding: 0; }
+}
 .media-title-row { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
 .media-title-row .title { flex: 1 1 auto; min-width: 0; }
 .copy-link { flex: 0 0 auto; margin-top: 1px; }
