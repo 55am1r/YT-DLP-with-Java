@@ -86,8 +86,8 @@ export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refre
 
   return (
     <section className="panel glass">
-      {/* On a wide screen the thumbnail sits beside the title instead of above it, so the
-          whole panel fits on one screen; on narrow ones it stays on top, full width. */}
+      {/* The thumbnail sits beside the title instead of above it, so the whole panel fits on
+          one screen — on desktops, tablets and phones alike. */}
       <div className="media-top">
       {/* Frame is the thumbnail's own shape — no backdrop, no bars. */}
       <div className="hero-wrap" style={frameRatio ? { '--ar': String(frameRatio) } : undefined}>
@@ -96,7 +96,7 @@ export default function MediaPanel({ analysis, onStart, codecs, onRefresh, refre
             className="hero-img"
             src={analysis.thumbnail}
             srcSet={analysis.thumbnailSrcset || undefined}
-            sizes="(max-width: 750px) 100vw, (max-width: 1000px) 560px, 360px"
+            sizes="(max-width: 640px) 45vw, 360px"
             alt=""
             onLoad={measure}
           />
